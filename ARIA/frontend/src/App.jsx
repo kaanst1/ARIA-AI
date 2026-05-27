@@ -504,69 +504,38 @@ export default function App() {
     }
   };
 
-  // ── Mikrofon (ses kaydı) ─────────────────────────────────────────────────────
+  // ── Mikrofon — Python backend üzerinden kayıt (WKWebView bypass) ────────────
   const handleMicClick = async () => {
     if (micRecording) {
-      // Kaydı durdur
-      if (mediaRecorderRef.current) {
-        mediaRecorderRef.current.stop();
-      }
+      // Kaydı durdur → transkript al
       setMicRecording(false);
+      try {
+        const res = await fetch(`${API_URL}/speech/record/stop`, { method: "POST" });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.transcript) {
+            setInput((prev) => prev + (prev ? " " : "") + data.transcript);
+          }
+        }
+      } catch {
+        // sessizce geç
+      }
       return;
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      // WKWebView (macOS/Tauri) WebM desteklemez — mp4 veya ogg kullan
-      const mimeType = [
-        "audio/webm;codecs=opus",
-        "audio/webm",
-        "audio/mp4",
-        "audio/ogg;codecs=opus",
-        "audio/ogg",
-      ].find((t) => MediaRecorder.isTypeSupported(t)) || "";
-      const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
-
-      const mediaRecorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-
-      mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(audioChunksRef.current, { type: mimeType || "audio/webm" });
-        const formData = new FormData();
-        formData.append("file", blob, `recording.${ext}`);
-
-        try {
-          const res = await fetch(`${API_URL}/speech/transcribe`, {
-            method: "POST",
-            body: formData,
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.transcript) {
-              setInput((prev) => prev + (prev ? " " : "") + data.transcript);
-            }
-          } else {
-            // faster-whisper yoksa bilgi ver
-            setInput((prev) => prev + " [Ses transkripti: faster-whisper kurulu değil]");
-          }
-        } catch {
-          // sessizce geç
+      // Python backend'de kaydı başlat (sounddevice ile)
+      const res = await fetch(`${API_URL}/speech/record/start`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setMicRecording(true);
+        } else {
+          alert(`Mikrofon başlatılamadı: ${data.error}`);
         }
-      };
-
-      mediaRecorder.start();
-      setMicRecording(true);
+      }
     } catch {
-      alert("Mikrofon erişimi reddedildi veya kullanılamıyor.");
+      alert("API'ye ulaşılamıyor, mikrofon çalışmıyor.");
     }
   };
 

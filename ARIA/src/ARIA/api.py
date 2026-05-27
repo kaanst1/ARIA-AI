@@ -360,6 +360,48 @@ import tempfile
 import os
 
 
+@app.post("/speech/record/start")
+async def speech_record_start(x_api_key: str | None = Header(default=None)):
+    """Python tarafında mikrofon kaydını başlat (Tauri/WKWebView uyumlu)."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.audio_recorder import get_recorder
+        result = get_recorder().start()
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/speech/record/stop")
+async def speech_record_stop(
+    language: str = "tr",
+    x_api_key: str | None = Header(default=None),
+):
+    """Kaydı durdur ve transkript et."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.audio_recorder import get_recorder
+        result = get_recorder().stop_and_transcribe(language=language)
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/speech/record/status")
+async def speech_record_status(x_api_key: str | None = Header(default=None)):
+    """Kayıt durumunu döndür."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.audio_recorder import get_recorder, AUDIO_AVAILABLE, WHISPER_AVAILABLE
+        return {
+            "recording": get_recorder().is_recording,
+            "audio_available": AUDIO_AVAILABLE,
+            "whisper_available": WHISPER_AVAILABLE,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @app.post("/speech/transcribe")
 async def speech_transcribe(
     file: UploadFile = File(...),
