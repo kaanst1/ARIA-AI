@@ -105,10 +105,35 @@ function MessageBubble({ message }) {
   );
 }
 
+// ── Hızlı komut butonları ─────────────────────────────────────────────────────
+
+const QUICK_COMMANDS = [
+  { label: "📋 Panoyu Analiz Et", action: "clipboard_analyze" },
+  { label: "📊 Sistem Durumu", action: "system_status" },
+  { label: "📅 Bugün Ne Var", action: "calendar_today" },
+  { label: "🌅 Sabah Briefi", action: "morning_brief" },
+];
+
+function QuickCommands({ onCommand }) {
+  return (
+    <div className="quick-commands">
+      {QUICK_COMMANDS.map((cmd) => (
+        <button
+          key={cmd.action}
+          className="quick-cmd-btn"
+          onClick={() => onCommand(cmd.action, cmd.label)}
+          title={cmd.label}
+        >
+          {cmd.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ── Sidebar bileşeni ──────────────────────────────────────────────────────────
 
-function Sidebar({ sessions, activeSessionId, onNewSession, onSelectSession, sidebarOpen, onToggle }) {
-  // Oturumları tarihe göre grupla
+function Sidebar({ sessions, activeSessionId, onNewSession, onSelectSession, sidebarOpen, onToggle, onQuickCommand }) {
   const grouped = groupSessionsByDate(sessions);
 
   return (
@@ -128,6 +153,9 @@ function Sidebar({ sessions, activeSessionId, onNewSession, onSelectSession, sid
           <span className="new-chat-icon">＋</span>
           Yeni Sohbet
         </button>
+
+        {/* Hızlı komutlar */}
+        <QuickCommands onCommand={onQuickCommand} />
 
         <nav className="session-list">
           {grouped.length === 0 && (
@@ -157,17 +185,46 @@ function Sidebar({ sessions, activeSessionId, onNewSession, onSelectSession, sid
   );
 }
 
+// ── Status Bar bileşeni ───────────────────────────────────────────────────────
+
+function StatusBar({ stats }) {
+  if (!stats) return null;
+  const cpu = stats?.system?.cpu_percent;
+  const ram = stats?.system?.ram_percent;
+
+  const cpuColor = cpu > 80 ? "#ff4444" : cpu > 60 ? "#ffaa00" : "#44ff88";
+  const ramColor = ram > 80 ? "#ff4444" : ram > 60 ? "#ffaa00" : "#44ff88";
+
+  return (
+    <div className="status-bar">
+      {cpu !== undefined && (
+        <span className="status-item" style={{ color: cpuColor }}>
+          CPU: {Math.round(cpu)}%
+        </span>
+      )}
+      {ram !== undefined && (
+        <span className="status-item" style={{ color: ramColor }}>
+          RAM: {Math.round(ram)}%
+        </span>
+      )}
+      <span className="status-item status-ollama" style={{ color: stats?.ollama_running ? "#44ff88" : "#ff4444" }}>
+        {stats?.ollama_running ? "● Ollama" : "○ Ollama"}
+      </span>
+    </div>
+  );
+}
+
 // ── Chat Panel bileşeni ───────────────────────────────────────────────────────
 
-function ChatPanel({ messages, input, setInput, onSend, loading, onToggleSidebar }) {
+function ChatPanel({ messages, input, setInput, onSend, loading, onToggleSidebar, onFileDropped, stats, onMicClick, micRecording }) {
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Textarea otomatik yükseklik
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
@@ -182,20 +239,46 @@ function ChatPanel({ messages, input, setInput, onSend, loading, onToggleSidebar
     }
   };
 
-  const handleMicClick = () => {
-    alert("Ses girişi yakında gelecek 🎤");
+  // Drag & Drop handlers
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+  const handleDragLeave = () => setIsDragOver(false);
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      onFileDropped(files[0]);
+    }
   };
 
   return (
-    <main className="chat-panel">
+    <main
+      className={`chat-panel ${isDragOver ? "chat-panel--dragover" : ""}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {/* Top bar */}
       <header className="chat-topbar">
         <button className="sidebar-toggle" onClick={onToggleSidebar} aria-label="Sidebar aç/kapat">
           ☰
         </button>
         <div className="chat-title">ARIA</div>
-        <div className="zero-cloud-badge">zero-cloud</div>
+        <div className="topbar-right">
+          <StatusBar stats={stats} />
+          <div className="zero-cloud-badge">zero-cloud</div>
+        </div>
       </header>
+
+      {/* Drag overlay */}
+      {isDragOver && (
+        <div className="drag-overlay">
+          <div className="drag-overlay-text">Dosyayı bırak — analiz edilecek</div>
+        </div>
+      )}
 
       {/* Mesajlar */}
       <section className="messages-area">
@@ -221,19 +304,19 @@ function ChatPanel({ messages, input, setInput, onSend, loading, onToggleSidebar
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKey}
-            placeholder="Bir şey sor..."
+            placeholder="Bir şey sor... (veya dosya sürükle-bırak)"
             rows={1}
             disabled={loading}
           />
           <div className="composer-actions">
             <button
-              className="btn-mic"
-              onClick={handleMicClick}
-              title="Ses girişi (yakında)"
+              className={`btn-mic ${micRecording ? "btn-mic--active" : ""}`}
+              onClick={onMicClick}
+              title={micRecording ? "Kaydediliyor... (durdurmak için tıkla)" : "Ses girişi"}
               aria-label="Mikrofon"
               type="button"
             >
-              🎤
+              {micRecording ? "⏹" : "🎤"}
             </button>
             <button
               className="btn-send"
@@ -254,7 +337,7 @@ function ChatPanel({ messages, input, setInput, onSend, loading, onToggleSidebar
           </div>
         </div>
         <div className="composer-hint">
-          Enter: gönder &nbsp;·&nbsp; Shift+Enter: satır atla
+          Enter: gönder &nbsp;·&nbsp; Shift+Enter: satır atla &nbsp;·&nbsp; Dosya sürükleyebilirsin
         </div>
       </section>
     </main>
@@ -270,6 +353,10 @@ export default function App() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [systemStats, setSystemStats] = useState(null);
+  const [micRecording, setMicRecording] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   // ── Oturumları yükle ────────────────────────────────────────────────────────
   const fetchSessions = useCallback(async () => {
@@ -287,6 +374,24 @@ export default function App() {
     fetchSessions();
   }, [fetchSessions]);
 
+  // ── Sistem istatistikleri — 5 saniyede bir çek ──────────────────────────────
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await fetch(`${API_URL}/status`);
+        if (res.ok) {
+          const data = await res.json();
+          setSystemStats(data);
+        }
+      } catch {
+        // sessizce geç
+      }
+    };
+    fetchStats();
+    const interval = setInterval(fetchStats, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   // ── Yeni sohbet ─────────────────────────────────────────────────────────────
   const handleNewSession = async () => {
     try {
@@ -302,7 +407,6 @@ export default function App() {
       setMessages([]);
     } catch (err) {
       console.error("Oturum oluşturulamadı:", err);
-      // Offline mod: local session
       const localId = -Date.now();
       setActiveSessionId(localId);
       setMessages([]);
@@ -328,6 +432,172 @@ export default function App() {
     }
   };
 
+  // ── Hızlı komutlar ───────────────────────────────────────────────────────────
+  const handleQuickCommand = async (action, label) => {
+    const ariaId = newId();
+
+    // Kullanıcı mesajı göster
+    setMessages((prev) => [
+      ...prev,
+      { id: newId(), role: "user", content: label, agent: "chat" },
+      { id: ariaId, role: "aria", content: "", agent: "chat", streaming: true },
+    ]);
+    setLoading(true);
+
+    try {
+      let result = "";
+      switch (action) {
+        case "clipboard_analyze": {
+          const res = await fetch(`${API_URL}/clipboard/analyze`, { method: "POST" });
+          const data = await res.json();
+          result = data.analysis || "Pano boş veya okunamadı.";
+          break;
+        }
+        case "system_status": {
+          const res = await fetch(`${API_URL}/system/stats`);
+          const data = await res.json();
+          const cpu = data?.cpu?.percent ?? "?";
+          const ram = data?.memory?.percent ?? "?";
+          const disk = data?.disk?.percent ?? "?";
+          result = `**Sistem Durumu**\n- CPU: %${cpu}\n- RAM: %${ram}\n- Disk: %${disk}`;
+          break;
+        }
+        case "calendar_today": {
+          const res = await fetch(`${API_URL}/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: "Bugünkü takvim etkinliklerimi göster", agent: "chat" }),
+          });
+          const data = await res.json();
+          result = data.response || "Takvim bilgisi alınamadı.";
+          break;
+        }
+        case "morning_brief": {
+          const res = await fetch(`${API_URL}/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: "sabah briefi", agent: "brief" }),
+          });
+          const data = await res.json();
+          result = data.response || "Brief alınamadı.";
+          break;
+        }
+        default:
+          result = "Bilinmeyen komut.";
+      }
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === ariaId ? { ...m, content: result, streaming: false } : m
+        )
+      );
+    } catch (err) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === ariaId
+            ? { ...m, content: `Hata: ${err.message}`, streaming: false }
+            : m
+        )
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Mikrofon (ses kaydı) ─────────────────────────────────────────────────────
+  const handleMicClick = async () => {
+    if (micRecording) {
+      // Kaydı durdur
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stop();
+      }
+      setMicRecording(false);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const formData = new FormData();
+        formData.append("file", blob, "recording.webm");
+
+        try {
+          const res = await fetch(`${API_URL}/speech/transcribe`, {
+            method: "POST",
+            body: formData,
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.transcript) {
+              setInput((prev) => prev + (prev ? " " : "") + data.transcript);
+            }
+          } else {
+            // faster-whisper yoksa bilgi ver
+            setInput((prev) => prev + " [Ses transkripti: faster-whisper kurulu değil]");
+          }
+        } catch {
+          // sessizce geç
+        }
+      };
+
+      mediaRecorder.start();
+      setMicRecording(true);
+    } catch {
+      alert("Mikrofon erişimi reddedildi veya kullanılamıyor.");
+    }
+  };
+
+  // ── Dosya drag & drop ────────────────────────────────────────────────────────
+  const handleFileDropped = async (file) => {
+    const ariaId = newId();
+    setMessages((prev) => [
+      ...prev,
+      { id: newId(), role: "user", content: `📎 Dosya: ${file.name}`, agent: "chat" },
+      { id: ariaId, role: "aria", content: "", agent: "analyst", streaming: true },
+    ]);
+    setLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`${API_URL}/file/analyze`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const result = data.analysis || "Dosya analiz edilemedi.";
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === ariaId ? { ...m, content: result, streaming: false } : m
+        )
+      );
+    } catch (err) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === ariaId
+            ? { ...m, content: `Dosya analiz hatası: ${err.message}`, streaming: false }
+            : m
+        )
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ── Mesaj gönder ─────────────────────────────────────────────────────────────
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
@@ -335,7 +605,6 @@ export default function App() {
     const text = input.trim();
     const ariaId = newId();
 
-    // Kullanıcı mesajını göster
     setMessages((prev) => [
       ...prev,
       { id: newId(), role: "user", content: text, agent: "chat" },
@@ -343,13 +612,11 @@ export default function App() {
     setInput("");
     setLoading(true);
 
-    // ARIA placeholder
     setMessages((prev) => [
       ...prev,
       { id: ariaId, role: "aria", content: "", agent: "chat", streaming: true },
     ]);
 
-    // Oturum yoksa oluştur
     let sessionId = activeSessionId;
     if (!sessionId || sessionId < 0) {
       try {
@@ -365,7 +632,7 @@ export default function App() {
           setSessions((prev) => [{ ...session, message_count: 0 }, ...prev]);
         }
       } catch {
-        // API erişilemez — session_id olmadan devam et
+        // offline mod
       }
     }
 
@@ -382,9 +649,7 @@ export default function App() {
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-      // Agent bilgisini header'dan al
       const agentName = res.headers.get("X-ARIA-Agent") || "chat";
-
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -422,7 +687,6 @@ export default function App() {
         }
       }
 
-      // Oturumları güncelle
       fetchSessions();
     } catch {
       setMessages((prev) => {
@@ -467,6 +731,7 @@ export default function App() {
         onSelectSession={handleSelectSession}
         sidebarOpen={sidebarOpen}
         onToggle={() => setSidebarOpen((v) => !v)}
+        onQuickCommand={handleQuickCommand}
       />
       <ChatPanel
         messages={messages}
@@ -475,6 +740,10 @@ export default function App() {
         onSend={sendMessage}
         loading={loading}
         onToggleSidebar={() => setSidebarOpen((v) => !v)}
+        onFileDropped={handleFileDropped}
+        stats={systemStats}
+        onMicClick={handleMicClick}
+        micRecording={micRecording}
       />
     </div>
   );

@@ -33,6 +33,16 @@ async def lifespan(_app: FastAPI):
             logger.info("ARIA warm-up tamam")
         except Exception as exc:
             logger.warning("Warm-up hatası: %s", exc)
+
+    # ProactiveScheduler'ı başlat
+    try:
+        from ARIA.scheduler.proactive import ProactiveScheduler
+        _scheduler = ProactiveScheduler()
+        _scheduler.start_background()
+        logger.info("ProactiveScheduler başlatıldı")
+    except Exception as exc:
+        logger.warning("ProactiveScheduler başlatılamadı: %s", exc)
+
     yield
 
 
@@ -341,6 +351,197 @@ async def models(x_api_key: str | None = Header(default=None)):
     _check_auth(x_api_key)
     from ARIA.engine.selector import list_models
     return {"models": list_models()}
+
+
+# ── Yeni endpoint'ler ─────────────────────────────────────────────────────────
+
+from fastapi import UploadFile, File, Query
+import tempfile
+import os
+
+
+@app.post("/speech/transcribe")
+async def speech_transcribe(
+    file: UploadFile = File(...),
+    x_api_key: str | None = Header(default=None),
+):
+    """Ses dosyasını transkript et (faster-whisper ile)."""
+    _check_auth(x_api_key)
+    try:
+        from faster_whisper import WhisperModel
+        WHISPER_OK = True
+    except ImportError:
+        WHISPER_OK = False
+
+    if not WHISPER_OK:
+        raise HTTPException(status_code=501, detail="faster-whisper yüklü değil")
+
+    # Geçici dosyaya kaydet
+    suffix = os.path.splitext(file.filename or "audio.wav")[1] or ".wav"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        from faster_whisper import WhisperModel
+        model = WhisperModel("small", device="cpu", compute_type="int8")
+        segments, info = model.transcribe(tmp_path, beam_size=5)
+        transcript = " ".join(seg.text.strip() for seg in segments)
+        return {
+            "transcript": transcript,
+            "language": info.language,
+            "duration": info.duration,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+
+
+@app.post("/file/analyze")
+async def file_analyze(
+    file: UploadFile = File(...),
+    x_api_key: str | None = Header(default=None),
+):
+    """Dosyayı yükle ve içeriğini analiz et."""
+    _check_auth(x_api_key)
+    content_bytes = await file.read()
+    filename = file.filename or "file"
+
+    # Metin olarak çözümle
+    try:
+        text_content = content_bytes.decode("utf-8", errors="replace")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Dosya metin olarak okunamadı")
+
+    # 50KB limit
+    if len(text_content) > 50 * 1024:
+        text_content = text_content[:50 * 1024] + "\n\n[...dosya kesildi, max 50KB]"
+
+    try:
+        prompt = (
+            f"Dosya adı: {filename}\n\n"
+            f"İçerik:\n{text_content[:3000]}\n\n"
+            "Bu dosyayı analiz et: içerik, yapı, önemli bilgiler ve özet."
+        )
+        response = engine.chat([{"role": "user", "content": prompt}])
+        return {"filename": filename, "analysis": response, "size": len(content_bytes)}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/system/stats")
+async def system_stats(x_api_key: str | None = Header(default=None)):
+    """Detaylı sistem istatistikleri."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.system_monitor import get_system_stats, PSUTIL_AVAILABLE
+        if not PSUTIL_AVAILABLE:
+            raise HTTPException(status_code=501, detail="psutil yüklü değil")
+        return get_system_stats()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/feeds")
+async def list_feeds(x_api_key: str | None = Header(default=None)):
+    """Kayıtlı RSS feed'lerini listele."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.rss_reader import _feed_manager
+        return {"feeds": _feed_manager.list_feeds()}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+class FeedAddRequest(BaseModel):
+    name: str
+    url: str
+
+
+@app.post("/feeds")
+async def add_feed(req: FeedAddRequest, x_api_key: str | None = Header(default=None)):
+    """Yeni RSS feed ekle."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.rss_reader import _feed_manager
+        _feed_manager.add_feed(req.name, req.url)
+        return {"success": True, "name": req.name, "url": req.url}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/files/search")
+async def files_search(
+    q: str = Query(..., description="Arama sorgusu"),
+    x_api_key: str | None = Header(default=None),
+):
+    """Dosya sistemi indexinde arama yap."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.file_index import search_files
+        results = search_files(q)
+        return {"query": q, "results": results, "count": len(results)}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/clipboard/analyze")
+async def clipboard_analyze(x_api_key: str | None = Header(default=None)):
+    """Panoyu oku ve analiz et."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.clipboard import clipboard_read
+        result = clipboard_read()
+        if not result["success"] or not result["content"].strip():
+            return {"analysis": "Pano boş veya okunamadı", "content": ""}
+
+        content = result["content"]
+        prompt = f"Panodaki içeriği analiz et ve özetle:\n\n{content[:3000]}"
+        analysis = engine.chat([{"role": "user", "content": prompt}])
+        return {"content": content[:500], "analysis": analysis}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/reports/daily")
+async def daily_report(x_api_key: str | None = Header(default=None)):
+    """Son günlük raporu döndür."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.scheduler.proactive import ProactiveScheduler
+        scheduler = ProactiveScheduler()
+        report = scheduler.get_daily_report()
+        if not report:
+            return {"report": "Henüz günlük rapor oluşturulmadı.", "available": False}
+        return {"report": report, "available": True}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+class CalendarAddRequest(BaseModel):
+    title: str
+    date: str
+    time: str
+    duration_minutes: int = 60
+
+
+@app.post("/calendar/add")
+async def calendar_add(req: CalendarAddRequest, x_api_key: str | None = Header(default=None)):
+    """Apple Calendar'a etkinlik ekle."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.calendar_tools import add_event
+        result = add_event(req.title, req.date, req.time, req.duration_minutes)
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

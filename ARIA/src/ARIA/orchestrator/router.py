@@ -18,11 +18,14 @@ Kullanıcının mesajını analiz eder, hangi ajanın devreye gireceğine karar 
 Ajanlar:
 - brief: Sabah özeti, günlük plan
 - researcher: Araştırma, analiz, bilgi toplama
+- deep_research: Derin/kapsamlı araştırma, çoklu kaynak
 - coder: Kod yazma, debug, teknik sorular
 - monitor: İzleme, takip, alert
 - analyst: Veri analizi, dosya okuma
 - writer: İçerik üretme, haber, tweet, makale
 - memory: Hafıza, not kaydetme, geçmiş sorgulama
+- planner: Çok adımlı görev planlaması, otomasyon
+- terminal: Shell komutları, sistem bilgisi
 - chat: Genel sohbet, diğer ajanlarla çözülemeyen
 
 SADECE şu JSON formatında cevap ver:
@@ -66,12 +69,26 @@ class Orchestrator:
 
         # ── Keyword kuralları ─────────────────────────────────────────────────
         keyword_rules: list[tuple[str, list[str]]] = [
-            ("brief", ["brief", "günlük özet", "gunluk ozet", "sabah planı"]),
+            ("brief", ["brief", "günlük özet", "gunluk ozet", "sabah planı", "sabah briefi"]),
             ("monitor", ["monitor", "alert", "izle", "takip"]),
             ("memory", ["hafıza", "memory", "not", "hatırla", "hatirla", "kaydet"]),
+            ("planner", [
+                "planla", "plan yap", "adım adım", "otomatik yap",
+                "sırayla yap", "workflow", "pipeline", "görev listesi",
+            ]),
+            ("terminal", [
+                "terminal", "komut", "shell", "çalıştır", "bash",
+                "hangi işlem", "işlem listesi", "disk kullanımı",
+                "klasör içeriği", "dosya listesi",
+            ]),
+            ("deep_research", [
+                "derin araştır", "detaylı araştır", "kapsamlı araştır",
+                "derinlemesine", "her açıdan", "akademik",
+            ]),
             ("researcher", [
                 "araştır", "arastir", "kaynak", "literatür", "literatur",
                 "hava durumu", "haber", "güncel", "son dakika", "bugün ne",
+                "videoya bak", "podcast özeti", "youtube",
             ]),
             ("analyst", ["analiz", "veri", "tablo", "raporla", "istatistik"]),
             ("coder", ["kod", "debug", "hata", "exception", "stack trace", "fonksiyon", "class"]),
@@ -162,6 +179,14 @@ class Orchestrator:
                 messages.extend(context_messages)
             messages.append({"role": "user", "content": user_input})
             response = self.engine.chat(messages)
+
+        # ── Self-reflection ──────────────────────────────────────────────────
+        try:
+            from ARIA.core.reflector import get_reflector
+            reflector = get_reflector()
+            response = reflector.reflect(user_input, response)
+        except Exception as exc:
+            self.logger.warning("Self-reflection hatası: %s", exc)
 
         tracker.log(agent_name, user_input, len(response))
         return response, route
