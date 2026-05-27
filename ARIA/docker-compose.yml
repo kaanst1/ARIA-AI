@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  aria:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - ARIA_CONFIG_PATH=/root/.aria/config.json
+    volumes:
+      - aria-data:/root/.aria
+
+volumes:
+  aria-data:

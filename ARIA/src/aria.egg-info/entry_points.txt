@@ -1,0 +1,4 @@
+[console_scripts]
+aria = ARIA.cli:main
+aria-api = ARIA.api:main
+aria-app = ARIA.main:main
