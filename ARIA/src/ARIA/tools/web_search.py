@@ -1,6 +1,9 @@
 # ARIA - Web Search Tool
 
-from duckduckgo_search import DDGS
+try:
+    from ddgs import DDGS          # yeni paket adı (ddgs >= 9.x)
+except ImportError:
+    from duckduckgo_search import DDGS  # eski paket adı (geriye dönük uyumluluk)
 from ARIA.core.config import load_config
 from ARIA.core.registry import register_tool
 import re
