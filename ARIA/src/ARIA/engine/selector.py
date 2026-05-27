@@ -19,7 +19,7 @@ def get_engine():
     config = load_config()
     if config.engine == "ollama":
         return OllamaEngine(config)
-    return OllamaEngine(config)
+    raise ValueError(f"Desteklenmeyen engine: {config.engine!r}. Gecerli: 'ollama'")
 
 
 def list_models() -> list:

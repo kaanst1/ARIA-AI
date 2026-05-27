@@ -1,6 +1,6 @@
 # ARIA - FastAPI Backend
 
-from fastapi import FastAPI, Header, HTTPException, status
+from fastapi import FastAPI, Header, HTTPException, status as http_status
 from contextlib import asynccontextmanager
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,7 +21,9 @@ async def lifespan(_app: FastAPI):
     config = load_config()
     if config.warmup_on_start:
         try:
-            engine.chat([{"role": "user", "content": config.warmup_message}])
+            # Global engine henüz bağlanmamış olabilir; doğrudan instance kullan
+            _warmup_engine = ARIAEngine(config)
+            _warmup_engine.chat([{"role": "user", "content": config.warmup_message}])
             logger.info("ARIA warm-up tamam")
         except Exception as exc:
             logger.warning("Warm-up hatasi: %s", exc)
@@ -47,7 +49,7 @@ def _check_auth(x_api_key: str | None) -> None:
         return
     if not config.api_key or x_api_key != config.api_key:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=http_status.HTTP_401_UNAUTHORIZED,
             detail="Gecersiz API anahtari",
         )
 
@@ -65,16 +67,27 @@ class ChatResponse(BaseModel):
 
 @app.post("/chat/stream")
 async def chat_stream(req: ChatRequest, x_api_key: str | None = Header(default=None)):
+    """Orchestrator üzerinden routing yapıp streaming cevap döner."""
     _check_auth(x_api_key)
+    from ARIA.tools.summarizer import summarize_text
+
+    reduced = summarize_text(req.message)
+    route = orchestrator.route(reduced)
+    agent_name = route.get("agent", req.agent)
 
     def event_stream():
         try:
-            for token in engine.stream_chat([{"role": "user", "content": req.message}]):
+            for token in engine.stream_chat([{"role": "user", "content": reduced}]):
                 yield f"data: {token}\n\n"
         except Exception as exc:
             yield f"data: [error] {exc}\n\n"
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    logger.info("stream ajan: %s", agent_name)
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"X-ARIA-Agent": agent_name},
+    )
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest, x_api_key: str | None = Header(default=None)):
@@ -85,11 +98,12 @@ async def chat(req: ChatRequest, x_api_key: str | None = Header(default=None)):
     try:
         with track_latency(metrics, "total_ms"):
             reduced = summarize_text(req.message)
-            response = orchestrator.dispatch(reduced)
-            route = orchestrator.route(reduced)
+            # dispatch_with_route: route+dispatch tek seferde, LLM 1x çağrılır
+            response, route = orchestrator.dispatch_with_route(reduced)
+            agent_name = route.get("agent", req.agent)
     except Exception as exc:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         )
     if req.speak:
@@ -103,7 +117,7 @@ async def chat(req: ChatRequest, x_api_key: str | None = Header(default=None)):
         logger.info("chat metrics: %s", metrics)
     return ChatResponse(
         response=response,
-        agent=route.get("agent", req.agent)
+        agent=agent_name,
     )
 
 
@@ -132,11 +146,9 @@ async def openai_chat(payload: dict, x_api_key: str | None = Header(default=None
     }
 
 @app.get("/status")
-async def status(x_api_key: str | None = Header(default=None)):
+async def get_status(x_api_key: str | None = Header(default=None)):
     _check_auth(x_api_key)
-    from ARIA.core.engine import ARIAEngine
-    engine = ARIAEngine()
-    return engine.doctor()
+    return ARIAEngine().doctor()
 
 
 @app.get("/presets")
@@ -174,6 +186,12 @@ async def models(x_api_key: str | None = Header(default=None)):
 
     return {"models": list_models()}
 
-if __name__ == "__main__":
+def main() -> None:
+    """aria-api entry point (pyproject.toml scripts)."""
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+    uvicorn.run("ARIA.api:app", host="0.0.0.0", port=8000, reload=False)
+
+
+if __name__ == "__main__":
+    main()

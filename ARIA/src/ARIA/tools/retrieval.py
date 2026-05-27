@@ -10,7 +10,8 @@ from ARIA.tools.retrieval_store import retrieve_memories
 @register_tool("retrieval")
 def retrieve(query: str, root: str | None = None, max_hits: int = 5) -> str:
     """Retrieve information for the given query."""
-    search_root = Path(root or Path.home())
+    # Varsayılan: ~/.aria — tüm home tarımak çok yavaş ve tehlikeli
+    search_root = Path(root or Path.home() / ".aria")
     hits = []
     for path in search_root.rglob("*.txt"):
         try:

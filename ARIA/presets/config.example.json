@@ -25,5 +25,7 @@
   "require_auth": false,
   "api_key": null,
   "log_level": "INFO",
-  "log_to_file": true
+  "log_to_file": true,
+  "allow_file_access": true,
+  "allowed_file_paths": ["~/.aria"]
 }

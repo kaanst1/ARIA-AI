@@ -4,6 +4,7 @@ from ARIA.core.engine import ARIAEngine
 from ARIA.core.config import load_config
 from ARIA.core.registry import get_agent
 from ARIA.learning.tracker import UsageTracker
+import ARIA.agents  # noqa: F401 — @register_agent decorator'larını tetikler
 import logging
 import json
 
@@ -67,11 +68,16 @@ class Orchestrator:
             if "{" in clean and "}" in clean:
                 clean = clean[clean.index("{"):clean.rindex("}")+1]
             return json.loads(clean)
-        except:
+        except Exception:
             return {"agent": "chat", "reason": "parse hatası"}
 
     def dispatch(self, user_input: str) -> str:
-        """Routing yap ve ilgili ajanı çalıştır"""
+        """Routing yap ve ilgili ajanı çalıştır."""
+        response, _ = self.dispatch_with_route(user_input)
+        return response
+
+    def dispatch_with_route(self, user_input: str) -> tuple[str, dict]:
+        """Routing yap, ajanı çalıştır; (cevap, route) döndür."""
         tracker = UsageTracker()
         route = self.route(user_input)
         agent_name = route.get("agent", "chat")
@@ -86,7 +92,7 @@ class Orchestrator:
             response = self.engine.chat(messages)
 
         tracker.log(agent_name, user_input, len(response))
-        return response
+        return response, route
 
     def interactive(self):
         """ARIA ana modu — tüm ajanlar aktif"""

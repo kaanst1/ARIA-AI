@@ -1,16 +1,98 @@
-# React + Vite
+# ARIA Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+ARIA'nın React + Vite tabanlı kullanıcı arayüzü.  
+React + Vite UI for the ARIA assistant.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🇹🇷 Türkçe
 
-## React Compiler
+### Gereksinimler
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Node.js ≥ 18
+- Çalışan ARIA API (`aria serve` — varsayılan: `http://localhost:8000`)
 
-## Expanding the ESLint configuration
+### Kurulum ve Çalıştırma
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+npm install
+
+# İsteğe bağlı: API adresini özelleştir
+cp .env.example .env.local
+# VITE_API_URL=http://localhost:8000
+
+# Geliştirme sunucusu
+npm run dev        # http://localhost:5173
+
+# Production build
+npm run build
+npm run preview
+```
+
+### Özellikler
+
+| Özellik | Açıklama |
+|---------|----------|
+| **Ajan seçici** | Sol panelden 8 ajan arasında geçiş |
+| **Streaming** | Token token SSE — cevaplar yazılırken görünür |
+| **Canlı sistem durumu** | `/status` endpoint'ten gerçek Ollama durumu ve model adı |
+| **Klavye kısayolları** | `Enter` gönder, `Shift+Enter` yeni satır |
+| **Responsive** | Mobil için daraltılmış panel + 2 sütun ajan grid |
+
+### Ortam Değişkenleri
+
+`.env.local` dosyası oluşturarak özelleştir (`.env.example`'den kopyala):
+
+```env
+# Backend API adresi — boş bırakılırsa localhost:8000 kullanılır
+VITE_API_URL=http://localhost:8000
+```
+
+### Proje Yapısı
+
+```
+frontend/
+├── src/
+│   ├── App.jsx        # Ana bileşen (sohbet, streaming, ajan yönetimi)
+│   ├── App.css        # Tüm stiller
+│   ├── index.css      # CSS değişkenleri, reset, font import
+│   └── main.jsx       # React entry point
+├── .env.example       # Ortam değişkeni şablonu
+├── vite.config.js     # Vite yapılandırması (dev proxy dahil)
+└── package.json
+```
+
+### Geliştirici Notu
+
+`vite.config.js` dev modunda `/chat`, `/status` vb. isteklerini `localhost:8000`'e proxy'ler. `VITE_API_URL` ayarlanmamışsa bu proxy devreye girer. Production'da backend'i aynı origin'de servis et ya da `VITE_API_URL`'yi aç.
+
+---
+
+## 🇬🇧 English
+
+### Requirements
+
+- Node.js ≥ 18
+- Running ARIA API (`aria serve` — default: `http://localhost:8000`)
+
+### Setup
+
+```bash
+npm install
+cp .env.example .env.local   # optional — customise API URL
+npm run dev                   # http://localhost:5173
+```
+
+### Features
+
+- **Agent switcher** — 8 specialised agents in the sidebar
+- **Streaming UI** — SSE token-by-token, live cursor animation
+- **Live system status** — real Ollama state and model name from `/status`
+- **Keyboard shortcuts** — `Enter` to send, `Shift+Enter` for newline
+- **Responsive layout** — collapses to mobile-friendly grid
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_API_URL` | `http://localhost:8000` | Backend API base URL |

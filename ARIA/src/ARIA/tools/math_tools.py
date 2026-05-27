@@ -7,11 +7,11 @@ from ARIA.core.registry import register_tool
 
 
 class _SafeEval(ast.NodeVisitor):
+    # ast.Num Python 3.12'de kaldırıldı; ast.Constant kullanılıyor
     allowed_nodes = (
         ast.Expression,
         ast.BinOp,
         ast.UnaryOp,
-        ast.Num,
         ast.Constant,
         ast.Add,
         ast.Sub,

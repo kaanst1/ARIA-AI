@@ -16,7 +16,7 @@ def summarize_text(text: str) -> str:
 
     engine = ARIAEngine()
     prompt = (
-        "Azdaki metni Turkce, kisa ve net sekilde ozetle. "
+        "Asagidaki metni Turkce, kisa ve net sekilde ozetle. "
         "Ozet en fazla {max_chars} karakter olsun.\n\n".format(
             max_chars=config.summary_max_chars
         )

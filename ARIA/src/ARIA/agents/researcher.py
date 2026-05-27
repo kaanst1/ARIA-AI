@@ -37,7 +37,9 @@ class ResearcherAgent:
         web_context = ws.format_results(search_results)
         news_context = ws.format_results(news_results)
 
-        if search_results and search_results[0].get("title") == "Hata":
+        # Arama başarısız olduysa (hata nesnesi döndüyse) yerel retrieval'a fall back et
+        search_failed = not search_results or search_results[0].get("title") == "Hata"
+        if search_failed:
             from ARIA.tools.retrieval import retrieve
 
             web_context = retrieve(topic)

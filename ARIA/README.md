@@ -1,70 +1,305 @@
-ARIA
-====
+# ARIA — Adaptive Reasoning & Intelligence Assistant
 
-Quickstart
-----------
+> Tamamen yerel çalışan, bulut bağlantısı olmayan kişisel AI asistanı.  
+> A fully local, zero-cloud personal AI assistant.
 
-1) Create and activate a virtual environment:
+---
+
+## 🇹🇷 Türkçe
+
+### Nedir?
+
+ARIA, Ollama üzerinde çalışan yerel LLM'leri kullanan çok ajanlı bir AI asistanıdır. Hiçbir veri dışarı çıkmaz — her şey kendi makinende çalışır.
+
+### Özellikler
+
+- **Çok ajanlı mimari** — her görev için özelleşmiş ajan (araştırma, kod, hafıza, izleme…)
+- **Akıllı yönlendirme** — mesaj içeriğine göre doğru ajanı seçer (kural + LLM hibrit)
+- **Streaming cevaplar** — token token, anlık UI güncellemesi (SSE)
+- **Kalıcı hafıza** — SQLite tabanlı not ve geçmiş
+- **Web araması** — DuckDuckGo ile yerel güvenlik filtrelemesi
+- **Sesli çıktı** — macOS `say` komutuyla offline TTS
+- **REST API** — OpenAI-uyumlu `/v1/chat/completions` dahil
+- **React arayüzü** — ajan seçimi, gerçek zamanlı streaming, sistem durumu
+
+### Gereksinimler
+
+| Araç | Versiyon |
+|------|----------|
+| Python | ≥ 3.9 |
+| [Ollama](https://ollama.com) | ≥ 0.1.x |
+| Node.js (frontend) | ≥ 18 |
+| macOS (TTS için) | isteğe bağlı |
+
+> **Model:** Varsayılan `qwen2.5:7b`. `ollama pull qwen2.5:7b` ile indir.
+
+### Hızlı Başlangıç
 
 ```bash
+# 1. Repo kökünde sanal ortam oluştur
+cd ARIA/
+python -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+
+# 2. Paketi yükle
+pip install -e .
+
+# 3. Ollama'yı başlat ve modeli indir
+ollama serve &
+ollama pull qwen2.5:7b
+
+# 4. API sunucusunu başlat
+aria serve
+# ya da:
+aria-api
+
+# 5. Sistem durumunu kontrol et
+aria status
+```
+
+### CLI Kullanımı
+
+```bash
+# Tek seferlik sohbet
+aria chat "Python'da async nedir?"
+
+# Sistem durumu (Ollama, model, ayarlar)
+aria status
+
+# Preset listele / uygula
+aria presets list
+aria presets apply config.example
+
+# API sunucusu (host/port özelleştirme)
+aria serve --host 0.0.0.0 --port 8000
+```
+
+### API Endpoint'leri
+
+| Method | Endpoint | Açıklama |
+|--------|----------|----------|
+| `POST` | `/chat` | Ajan routing ile senkron cevap |
+| `POST` | `/chat/stream` | SSE ile token-by-token streaming |
+| `POST` | `/v1/chat/completions` | OpenAI uyumlu endpoint |
+| `GET` | `/status` | Ollama durumu, aktif model |
+| `GET` | `/models` | Yüklü Ollama modelleri |
+| `GET` | `/hardware` | Donanım bilgisi |
+| `GET` | `/presets` | Kayıtlı preset listesi |
+| `POST` | `/presets/apply` | Preset uygula |
+
+```bash
+# Sağlık kontrolü
+curl http://localhost:8000/status
+
+# Sohbet
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Merhaba", "agent": "chat"}'
+
+# Streaming (SSE)
+curl -N -X POST http://localhost:8000/chat/stream \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Python async nasıl çalışır?"}'
+
+# Sesli cevap (macOS)
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Bugün nasılsın?", "speak": true}'
+
+# API key ile (require_auth: true ise)
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: SENIN_ANAHTARIN" \
+  -d '{"message": "Merhaba"}'
+```
+
+### Ajanlar
+
+| Ajan | Tetikleyici kelimeler | Görev |
+|------|-----------------------|-------|
+| `chat` | genel sohbet | Varsayılan, her şey |
+| `coder` | kod, debug, hata, exception | Kod yazma ve debug |
+| `researcher` | araştır, kaynak, literatür | Web araştırması + rapor |
+| `analyst` | analiz, veri, tablo | Metin/dosya veri analizi |
+| `writer` | yaz, makale, tweet, haber | İçerik üretimi |
+| `brief` | brief, sabah, günlük özet | Günlük haber özeti |
+| `monitor` | izle, takip, alert | Periyodik konu takibi |
+| `memory` | hafıza, not, hatırla | Kalıcı not ve arama |
+
+### Konfigürasyon
+
+Config dosyası: `~/.aria/config.json`  
+Örnek: `presets/config.example.json`
+
+```json
+{
+  "model": "qwen2.5:7b",
+  "engine": "ollama",
+  "base_url": "http://localhost:11434",
+  "language": "tr",
+  "cloud_fallback": false,
+  "allow_web_search": true,
+  "enable_tts": true,
+  "tts_engine": "macos_say",
+  "require_auth": false,
+  "api_key": null,
+  "log_level": "INFO"
+}
+```
+
+Önemli ayarlar:
+
+| Ayar | Varsayılan | Açıklama |
+|------|-----------|----------|
+| `model` | `qwen2.5:7b` | Ollama model adı |
+| `cloud_fallback` | `false` | `true` yapma — veri dışarı çıkar |
+| `allow_web_search` | `true` | DuckDuckGo araması |
+| `enable_tts` | `true` | Sesli çıktı (macOS) |
+| `require_auth` | `false` | API key zorunluluğu |
+| `warmup_on_start` | `true` | Başlangıçta model ısıtma |
+| `enable_summarization` | `true` | Uzun girdileri özetle |
+
+### Frontend
+
+```bash
+cd frontend/
+npm install
+
+# .env oluştur (isteğe bağlı — varsayılan localhost:8000)
+cp .env.example .env.local
+
+# Geliştirme
+npm run dev          # http://localhost:5173
+
+# Production build
+npm run build
+npm run preview
+```
+
+### Docker
+
+```bash
+cd ARIA/
+docker compose up --build
+```
+
+> Docker imajı sadece API'yi çalıştırır. Ollama ayrı kurulu olmalı.
+
+### Proje Yapısı
+
+```
+ARIA/
+├── src/ARIA/
+│   ├── agents/          # 7 özel ajan
+│   ├── core/            # Config, engine, registry, logging
+│   ├── engine/          # Ollama engine ve selector
+│   ├── memory/          # SQLite hafıza deposu
+│   ├── orchestrator/    # Ajan yönlendirici
+│   ├── skills/          # Yeniden kullanılabilir skill'ler
+│   ├── tools/           # Web search, dosya, TTS, matematik…
+│   ├── learning/        # Kullanım takibi ve zamanlayıcı
+│   ├── telemetry/       # Gecikme metrikleri
+│   ├── api.py           # FastAPI backend
+│   ├── cli.py           # Komut satırı arayüzü
+│   └── main.py          # İnteraktif mod giriş noktası
+├── frontend/            # React + Vite UI
+├── presets/             # Hazır config dosyaları
+├── tests/               # API testleri
+├── Dockerfile
+├── docker-compose.yml
+└── pyproject.toml
+```
+
+---
+
+## 🇬🇧 English
+
+### What is ARIA?
+
+ARIA (Adaptive Reasoning & Intelligence Assistant) is a multi-agent AI assistant that runs entirely on local LLMs via Ollama. No data ever leaves your machine.
+
+### Features
+
+- **Multi-agent architecture** — specialised agents for each task type
+- **Smart routing** — hybrid rule + LLM-based dispatcher selects the right agent
+- **Streaming responses** — token-by-token via SSE, live UI updates
+- **Persistent memory** — SQLite-backed notes and history
+- **Web search** — DuckDuckGo with sensitive-data filtering
+- **Offline TTS** — macOS `say` command
+- **REST API** — including OpenAI-compatible `/v1/chat/completions`
+- **React UI** — agent switching, real-time streaming, live system status
+
+### Requirements
+
+| Tool | Version |
+|------|---------|
+| Python | ≥ 3.9 |
+| [Ollama](https://ollama.com) | ≥ 0.1.x |
+| Node.js (frontend only) | ≥ 18 |
+
+> **Default model:** `qwen2.5:7b` — pull with `ollama pull qwen2.5:7b`
+
+### Quickstart
+
+```bash
+cd ARIA/
 python -m venv .venv
 source .venv/bin/activate
-```
 
-2) Install in editable mode:
-
-```bash
 pip install -e .
+
+ollama serve &
+ollama pull qwen2.5:7b
+
+aria serve          # start API on :8000
+aria status         # verify everything is running
 ```
 
-3) Run the API and app:
+### CLI
 
 ```bash
-aria-api
-aria-app
+aria chat "What is async/await in Python?"
+aria status
+aria presets list
+aria presets apply config.example
+aria serve --host 0.0.0.0 --port 8000
 ```
 
-API Examples
-------------
+### Agents
 
-Health check:
+| Agent | Trigger words | Purpose |
+|-------|--------------|---------|
+| `chat` | general | Default fallback |
+| `coder` | code, debug, error, exception | Code & debugging |
+| `researcher` | research, source, literature | Web research + report |
+| `analyst` | analyse, data, table | Text/file data analysis |
+| `writer` | write, article, tweet, news | Content generation |
+| `brief` | brief, morning, daily summary | Daily news digest |
+| `monitor` | monitor, track, alert | Periodic topic monitoring |
+| `memory` | memory, note, remember | Persistent notes & search |
+
+### Configuration
+
+Config is stored at `~/.aria/config.json`. See `presets/config.example.json` for all options.
+
+### Docker
 
 ```bash
-curl http://localhost:8000/status
+docker compose up --build
 ```
 
-Chat:
+The image runs the API only. Ollama must be installed and accessible separately.
+
+### Development
 
 ```bash
-curl -X POST http://localhost:8000/chat \
-	-H "Content-Type: application/json" \
-	-d '{"message":"Merhaba"}'
+pip install -e ".[dev]"
+pytest ARIA/tests/
 ```
 
-Streaming chat (SSE):
+### Security Notes
 
-```bash
-curl -N -X POST http://localhost:8000/chat/stream \
-	-H "Content-Type: application/json" \
-	-d '{"message":"Merhaba"}'
-```
-
-Chat + local TTS:
-
-```bash
-curl -X POST http://localhost:8000/chat \
-	-H "Content-Type: application/json" \
-	-d '{"message":"Merhaba","speak":true}'
-```
-
-Configuration
--------------
-
-Config file is stored at `~/.aria/config.json`.
-Example config is in `presets/config.example.json`.
-
-Notes
------
-
-- Code lives in `src/ARIA` (src layout).
-- Requires Python 3.9+.
+- `cloud_fallback` is `false` by default and should remain so
+- `base_url` is restricted to `localhost` / `127.0.0.1`
+- Web search queries are filtered for sensitive data (emails, phone numbers, file paths)
+- File access is restricted to `~/.aria` by default

@@ -26,13 +26,8 @@ class MemoryAgent:
 
     def add(self, content: str, category: str = "genel") -> str:
         """Hafızaya ekle"""
-        memory = {
-            "id": len(self.memories) + 1,
-            "content": content,
-            "category": category,
-            "date": datetime.now().isoformat()
-        }
-        self.store.add(memory["content"], memory["category"], memory["date"])
+        created_at = datetime.now().isoformat()
+        self.store.add(content, category, created_at)
         return f"✅ Hafızaya eklendi: [{category}] {content}"
 
     def search(self, query: str) -> str:

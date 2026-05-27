@@ -122,6 +122,15 @@
   display: inline-block;
 }
 
+.dot.offline {
+  background: #f87171;
+}
+
+.dot.pending {
+  background: #facc15;
+  animation: blink 1.2s step-start infinite;
+}
+
 .stage {
   position: relative;
   z-index: 1;
@@ -225,6 +234,20 @@
 .typing {
   font-family: "JetBrains Mono", monospace;
   color: var(--muted);
+}
+
+.cursor {
+  display: inline-block;
+  color: var(--accent, #7c6af7);
+  font-weight: 300;
+  line-height: 1;
+  animation: blink 0.9s step-start infinite;
+  margin-left: 1px;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
 }
 
 .composer {

@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.env/
+
+# uv
+.python-version
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs & runtime data
+*.log
+ARIA/data/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Node / Frontend
+ARIA/frontend/node_modules/
+ARIA/frontend/dist/
+ARIA/frontend/.env.local
+ARIA/frontend/.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
