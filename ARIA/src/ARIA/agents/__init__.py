@@ -11,6 +11,17 @@ from ARIA.agents.planner import PlannerAgent
 from ARIA.agents.terminal_agent import TerminalAgent
 from ARIA.agents.research_agent import DeepResearchAgent
 
+# Tool'ları yükle — @register_tool decorator'larını tetikler
+try:
+    from ARIA.tools import (  # noqa: F401
+        whatsapp_control, speech_input, code_runner,
+        shell_runner, clipboard, file_index, rss_reader,
+        log_analyzer, github_monitor, translator,
+        podcast_summarizer, system_monitor, calendar_tools,
+    )
+except Exception:
+    pass
+
 __all__ = [
     "AnalystAgent",
     "BriefAgent",

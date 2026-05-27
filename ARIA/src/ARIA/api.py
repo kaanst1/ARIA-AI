@@ -544,6 +544,40 @@ async def calendar_add(req: CalendarAddRequest, x_api_key: str | None = Header(d
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+# ── WhatsApp endpoint'leri ───────────────────────────────────────────────────
+
+class WhatsAppSendRequest(BaseModel):
+    contact: str          # İsim veya telefon numarası
+    message: str
+    use_phone: bool = False  # True → URL scheme (numara), False → UI otomasyon (isim)
+
+
+@app.post("/whatsapp/send")
+async def whatsapp_send(req: WhatsAppSendRequest, x_api_key: str | None = Header(default=None)):
+    """WhatsApp mesajı gönder."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.whatsapp_control import send_via_url_scheme, send_via_ui
+        if req.use_phone:
+            result = send_via_url_scheme(req.contact, req.message)
+        else:
+            result = send_via_ui(req.contact, req.message)
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/whatsapp/status")
+async def whatsapp_status_endpoint(x_api_key: str | None = Header(default=None)):
+    """WhatsApp durumunu kontrol et."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.whatsapp_control import whatsapp_status
+        return whatsapp_status()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:

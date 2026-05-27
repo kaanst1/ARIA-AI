@@ -61,7 +61,9 @@ class Orchestrator:
             ("izle ", "monitor"),
             ("takip et", "monitor"),
             ("analiz et", "analyst"),
-            ("yaz ", "writer"),       # "yaz tweet/makale/haber" bağlamı
+            ("yaz ", "writer"),
+            ("whatsapp", "chat"),     # whatsapp → chat agent + whatsapp_tool
+            ("mesaj gönder", "chat"),
         ]
         for prefix, agent in prefix_rules:
             if text.startswith(prefix):
@@ -94,6 +96,13 @@ class Orchestrator:
             ("coder", ["kod", "debug", "hata", "exception", "stack trace", "fonksiyon", "class"]),
             ("writer", ["makale", "tweet", "rapor", "haber", "içerik"]),
         ]
+
+        # ── WhatsApp özel tespiti ─────────────────────────────────────────────
+        if "whatsapp" in text or (
+            ("mesaj" in text or "yaz" in text) and
+            any(k in text for k in ["gönder", "at", "söyle", "ilet"])
+        ):
+            return {"agent": "chat", "reason": "whatsapp mesaj komutu"}
         for agent, keys in keyword_rules:
             if any(k in text for k in keys):
                 return {"agent": agent, "reason": "keyword eşleşmesi"}
