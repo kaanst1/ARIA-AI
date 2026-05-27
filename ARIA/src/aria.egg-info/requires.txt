@@ -1,3 +1,4 @@
+ddgs>=9.8.0
 duckduckgo-search>=8.1.1
 fastapi<0.129,>=0.128.0
 pydantic>=2.8.2

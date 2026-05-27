@@ -1,12 +1,16 @@
 # ARIA - Orchestrator (Ajan Koordinatörü)
 
+from __future__ import annotations
+
+import json
+import logging
+from typing import Optional
+
+import ARIA.agents  # noqa: F401 — @register_agent decorator'larını tetikler
 from ARIA.core.engine import ARIAEngine
 from ARIA.core.config import load_config
 from ARIA.core.registry import get_agent
 from ARIA.learning.tracker import UsageTracker
-import ARIA.agents  # noqa: F401 — @register_agent decorator'larını tetikler
-import logging
-import json
 
 ROUTER_SYSTEM_PROMPT = """Sen ARIA'nın Orkestratörüsün.
 Kullanıcının mesajını analiz eder, hangi ajanın devreye gireceğine karar verirsin.
@@ -24,38 +28,78 @@ Ajanlar:
 SADECE şu JSON formatında cevap ver:
 {"agent": "ajan_adı", "reason": "kısa neden"}"""
 
+
 class Orchestrator:
-    def __init__(self):
+    """Gelen mesajları uygun ajanlara yönlendiren koordinatör."""
+
+    def __init__(self) -> None:
         self.engine = ARIAEngine()
         self.config = load_config()
         self.logger = logging.getLogger("aria.orchestrator")
 
-    def _rule_route(self, user_input: str) -> dict | None:
-        text = user_input.lower()
-        rules = [
-            ("brief", ["brief", "sabah", "günlük özet", "gunluk ozet"]),
-            ("monitor", ["izle", "monitor", "takip", "alert"]),
-            ("memory", ["hafıza", "memory", "not", "hatırla", "hatirla"]),
-            ("researcher", ["araştır", "arastir", "kaynak", "literatür", "literatur",
-                            "hava durumu", "haber", "güncel", "son dakika", "bugün ne"]),
-            ("analyst", ["analiz", "veri", "tablo", "raporla"]),
-            ("coder", ["kod", "debug", "hata", "exception", "stack trace"]),
-            ("writer", ["yaz", "makale", "tweet", "rapor", "haber"]),
+    # ── Kural tabanlı yönlendirme ─────────────────────────────────────────────
+
+    def _rule_route(self, user_input: str) -> Optional[dict]:
+        """Hızlı prefix/keyword eşleştirmesi ile ajan seç.
+
+        Öncelik sırası: daha spesifik kurallar önce.
+        """
+        text = user_input.lower().strip()
+
+        # ── Prefix tabanlı hızlı komutlar ────────────────────────────────────
+        prefix_rules: list[tuple[str, str]] = [
+            ("sabah briefi", "brief"),
+            ("sabah özeti", "brief"),
+            ("araştır ", "researcher"),
+            ("kod yaz", "coder"),
+            ("kodla", "coder"),
+            ("hatırlat", "memory"),
+            ("not al", "memory"),
+            ("izle ", "monitor"),
+            ("takip et", "monitor"),
+            ("analiz et", "analyst"),
+            ("yaz ", "writer"),       # "yaz tweet/makale/haber" bağlamı
         ]
-        for agent, keys in rules:
+        for prefix, agent in prefix_rules:
+            if text.startswith(prefix):
+                return {"agent": agent, "reason": f"prefix: {prefix}"}
+
+        # ── Keyword kuralları ─────────────────────────────────────────────────
+        keyword_rules: list[tuple[str, list[str]]] = [
+            ("brief", ["brief", "günlük özet", "gunluk ozet", "sabah planı"]),
+            ("monitor", ["monitor", "alert", "izle", "takip"]),
+            ("memory", ["hafıza", "memory", "not", "hatırla", "hatirla", "kaydet"]),
+            ("researcher", [
+                "araştır", "arastir", "kaynak", "literatür", "literatur",
+                "hava durumu", "haber", "güncel", "son dakika", "bugün ne",
+            ]),
+            ("analyst", ["analiz", "veri", "tablo", "raporla", "istatistik"]),
+            ("coder", ["kod", "debug", "hata", "exception", "stack trace", "fonksiyon", "class"]),
+            ("writer", ["makale", "tweet", "rapor", "haber", "içerik"]),
+        ]
+        for agent, keys in keyword_rules:
             if any(k in text for k in keys):
-                return {"agent": agent, "reason": "kural eslesmesi"}
+                return {"agent": agent, "reason": "keyword eşleşmesi"}
+
         return None
 
+    # ── LLM tabanlı yönlendirme ───────────────────────────────────────────────
+
     def route(self, user_input: str) -> dict:
-        """Mesajı analiz et, uygun ajanı seç"""
+        """Mesajı analiz et, uygun ajanı seç."""
         rule_pick = self._rule_route(user_input)
         if rule_pick:
             return rule_pick
 
         messages = [
             {"role": "system", "content": ROUTER_SYSTEM_PROMPT},
-            {"role": "user", "content": f"Kullanıcı mesajı: {user_input}\n\nSadece JSON döndür, başka hiçbir şey yazma."}
+            {
+                "role": "user",
+                "content": (
+                    f"Kullanıcı mesajı: {user_input}\n\n"
+                    "Sadece JSON döndür, başka hiçbir şey yazma."
+                ),
+            },
         ]
 
         response = self.engine.chat(messages)
@@ -67,36 +111,65 @@ class Orchestrator:
             elif "```" in clean:
                 clean = clean.split("```")[1].strip()
             if "{" in clean and "}" in clean:
-                clean = clean[clean.index("{"):clean.rindex("}")+1]
+                clean = clean[clean.index("{"):clean.rindex("}") + 1]
             return json.loads(clean)
         except Exception:
             return {"agent": "chat", "reason": "parse hatası"}
 
-    def dispatch(self, user_input: str) -> str:
+    # ── Dispatch ──────────────────────────────────────────────────────────────
+
+    def dispatch(self, user_input: str, session_id: Optional[int] = None) -> str:
         """Routing yap ve ilgili ajanı çalıştır."""
-        response, _ = self.dispatch_with_route(user_input)
+        response, _ = self.dispatch_with_route(user_input, session_id=session_id)
         return response
 
-    def dispatch_with_route(self, user_input: str) -> tuple[str, dict]:
-        """Routing yap, ajanı çalıştır; (cevap, route) döndür."""
+    def dispatch_with_route(
+        self,
+        user_input: str,
+        session_id: Optional[int] = None,
+    ) -> tuple[str, dict]:
+        """Routing yap, ajanı çalıştır; (cevap, route) döndür.
+
+        session_id verilirse ConversationStore'dan son N mesajı alıp
+        engine.chat() çağrısına context olarak ekler.
+        """
         tracker = UsageTracker()
         route = self.route(user_input)
         agent_name = route.get("agent", "chat")
 
         self.logger.info("Ajan: %s — %s", agent_name, route.get("reason", ""))
 
+        # ── Konuşma context'ini hazırla ───────────────────────────────────────
+        context_messages: list[dict] = []
+        if session_id is not None:
+            try:
+                from ARIA.memory.conversation_store import ConversationStore
+                store = ConversationStore()
+                limit = self.config.conversation_history_limit
+                context_messages = store.get_context_messages(session_id, n=limit)
+            except Exception as exc:
+                self.logger.warning("Context yüklenemedi: %s", exc)
+
+        # ── Ajan çalıştır ─────────────────────────────────────────────────────
         agent_cls = get_agent(agent_name)
         if agent_cls:
+            # Ajan varsa handle() çağır — basit bir string döner
             response = agent_cls().handle(user_input)
         else:
-            messages = [{"role": "user", "content": user_input}]
+            # Doğrudan LLM — context mesajlarını ekle
+            messages: list[dict] = []
+            if context_messages:
+                messages.extend(context_messages)
+            messages.append({"role": "user", "content": user_input})
             response = self.engine.chat(messages)
 
         tracker.log(agent_name, user_input, len(response))
         return response, route
 
-    def interactive(self):
-        """ARIA ana modu — tüm ajanlar aktif"""
+    # ── İnteraktif mod ───────────────────────────────────────────────────────
+
+    def interactive(self) -> None:
+        """ARIA ana modu — tüm ajanlar aktif."""
         print("\n🤖 ARIA — Tüm Sistemler Aktif")
         print("=" * 40)
 

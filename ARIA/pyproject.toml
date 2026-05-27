@@ -7,6 +7,7 @@ requires-python = ">=3.9"
 dependencies = [
     "ddgs>=9.8.0",
     "fastapi>=0.128.0,<0.129",
+    "psutil>=5.9.0",
     "pydantic>=2.8.2",
     "requests>=2.31.0,<2.33",
     "schedule>=1.2.2",
