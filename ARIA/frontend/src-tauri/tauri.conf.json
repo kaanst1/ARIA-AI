@@ -44,10 +44,10 @@
     ],
     "macOS": {
       "minimumSystemVersion": "12.0",
-      "entitlements": null,
-      "exceptionDomain": "",
+      "entitlements": "entitlements.plist",
       "signingIdentity": null,
-      "providerShortName": null
+      "providerShortName": null,
+      "infoPlist": "Info.plist"
     },
     "resources": []
   }

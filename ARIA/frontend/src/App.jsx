@@ -517,7 +517,20 @@ export default function App() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+
+      // WKWebView (macOS/Tauri) WebM desteklemez — mp4 veya ogg kullan
+      const mimeType = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/ogg;codecs=opus",
+        "audio/ogg",
+      ].find((t) => MediaRecorder.isTypeSupported(t)) || "";
+      const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
+
+      const mediaRecorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -527,9 +540,9 @@ export default function App() {
 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(audioChunksRef.current, { type: mimeType || "audio/webm" });
         const formData = new FormData();
-        formData.append("file", blob, "recording.webm");
+        formData.append("file", blob, `recording.${ext}`);
 
         try {
           const res = await fetch(`${API_URL}/speech/transcribe`, {
