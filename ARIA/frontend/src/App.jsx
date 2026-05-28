@@ -25,10 +25,11 @@ function MarkdownContent({ content }) {
                 language={match[1]}
                 PreTag="div"
                 customStyle={{
-                  margin: "10px 0",
-                  borderRadius: "8px",
-                  fontSize: "13px",
-                  border: "1px solid rgba(255,255,255,0.08)",
+                  margin: "8px 0",
+                  borderRadius: "4px",
+                  fontSize: "12px",
+                  border: "1px solid rgba(0, 212, 255, 0.15)",
+                  background: "#050810",
                 }}
                 {...props}
               >
@@ -66,291 +67,71 @@ function MarkdownContent({ content }) {
   );
 }
 
-// ── Tek mesaj bileşeni ────────────────────────────────────────────────────────
+// ── Dijital saat ──────────────────────────────────────────────────────────────
 
-function MessageBubble({ message }) {
-  const isUser = message.role === "user";
-  const agentLabel = message.agent && message.agent !== "chat" ? message.agent : null;
+function DigitalClock() {
+  const [time, setTime] = useState(() => {
+    const now = new Date();
+    return now.toLocaleTimeString("tr-TR", { hour12: false });
+  });
 
-  return (
-    <div className={`message-row ${isUser ? "message-row--user" : "message-row--aria"}`}>
-      {!isUser && (
-        <div className="avatar" aria-label="ARIA">
-          A
-        </div>
-      )}
-      <div className={`bubble ${isUser ? "bubble--user" : "bubble--aria"}`}>
-        <div className="bubble-header">
-          <span className="bubble-sender">{isUser ? "Sen" : "ARIA"}</span>
-          {agentLabel && (
-            <span className="bubble-agent-tag">{agentLabel}</span>
-          )}
-        </div>
-        <div className="bubble-content">
-          {message.streaming && !message.content ? (
-            <span className="typing-dots">
-              <span /><span /><span />
-            </span>
-          ) : isUser ? (
-            <span className="user-text">{message.content}</span>
-          ) : (
-            <MarkdownContent content={message.content} />
-          )}
-          {message.streaming && message.content && (
-            <span className="stream-cursor">▌</span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      setTime(now.toLocaleTimeString("tr-TR", { hour12: false }));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return <span className="topbar-clock">{time}</span>;
 }
 
 // ── Hızlı komut butonları ─────────────────────────────────────────────────────
 
 const QUICK_COMMANDS = [
-  { label: "📋 Panoyu Analiz Et", action: "clipboard_analyze" },
-  { label: "📊 Sistem Durumu", action: "system_status" },
-  { label: "📅 Bugün Ne Var", action: "calendar_today" },
-  { label: "🌅 Sabah Briefi", action: "morning_brief" },
+  { label: "Sabah Briefi", action: "morning_brief" },
+  { label: "Sistem Durumu", action: "system_status" },
+  { label: "Bugün Ne Var", action: "calendar_today" },
+  { label: "Panoyu Analiz Et", action: "clipboard_analyze" },
 ];
 
-function QuickCommands({ onCommand }) {
-  return (
-    <div className="quick-commands">
-      {QUICK_COMMANDS.map((cmd) => (
-        <button
-          key={cmd.action}
-          className="quick-cmd-btn"
-          onClick={() => onCommand(cmd.action, cmd.label)}
-          title={cmd.label}
-        >
-          {cmd.label}
-        </button>
-      ))}
-    </div>
-  );
+// ── Yardımcı: oturumları tarihe göre grupla ───────────────────────────────────
+
+function groupSessionsByDate(sessions) {
+  if (!sessions.length) return [];
+
+  const now = new Date();
+  const todayStr = dateStr(now);
+  const yesterdayStr = dateStr(new Date(now - 86_400_000));
+  const weekAgo = new Date(now - 7 * 86_400_000);
+
+  const groups = {};
+
+  for (const s of sessions) {
+    const d = new Date(s.updated_at + "Z");
+    const ds = dateStr(d);
+
+    let label;
+    if (ds === todayStr) label = "Bugün";
+    else if (ds === yesterdayStr) label = "Dün";
+    else if (d >= weekAgo) label = "Bu Hafta";
+    else label = d.toLocaleDateString("tr-TR", { month: "long", year: "numeric" });
+
+    if (!groups[label]) groups[label] = [];
+    groups[label].push(s);
+  }
+
+  const order = ["Bugün", "Dün", "Bu Hafta"];
+  const keys = [
+    ...order.filter((k) => groups[k]),
+    ...Object.keys(groups).filter((k) => !order.includes(k)),
+  ];
+
+  return keys.map((label) => ({ label, items: groups[label] }));
 }
 
-// ── Sidebar bileşeni ──────────────────────────────────────────────────────────
-
-function Sidebar({ sessions, activeSessionId, onNewSession, onSelectSession, sidebarOpen, onToggle, onQuickCommand }) {
-  const grouped = groupSessionsByDate(sessions);
-
-  return (
-    <>
-      {sidebarOpen && (
-        <div className="sidebar-overlay" onClick={onToggle} />
-      )}
-      <aside className={`sidebar ${sidebarOpen ? "sidebar--open" : ""}`}>
-        <div className="sidebar-header">
-          <div className="brand">
-            <span className="brand-name">ARIA</span>
-            <span className="brand-badge">LOCAL AI</span>
-          </div>
-        </div>
-
-        <button className="new-chat-btn" onClick={onNewSession}>
-          <span className="new-chat-icon">＋</span>
-          Yeni Sohbet
-        </button>
-
-        {/* Hızlı komutlar */}
-        <QuickCommands onCommand={onQuickCommand} />
-
-        <nav className="session-list">
-          {grouped.length === 0 && (
-            <div className="session-empty">Henüz sohbet yok</div>
-          )}
-          {grouped.map(({ label, items }) => (
-            <div key={label} className="session-group">
-              <div className="session-group-label">{label}</div>
-              {items.map((session) => (
-                <button
-                  key={session.id}
-                  className={`session-item ${session.id === activeSessionId ? "session-item--active" : ""}`}
-                  onClick={() => onSelectSession(session.id)}
-                  title={session.title}
-                >
-                  <span className="session-title">{session.title}</span>
-                  {session.message_count > 0 && (
-                    <span className="session-count">{session.message_count}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          ))}
-        </nav>
-      </aside>
-    </>
-  );
-}
-
-// ── Status Bar bileşeni ───────────────────────────────────────────────────────
-
-function StatusBar({ stats }) {
-  if (!stats) return null;
-  const cpu = stats?.system?.cpu_percent;
-  const ram = stats?.system?.ram_percent;
-
-  const cpuColor = cpu > 80 ? "#ff4444" : cpu > 60 ? "#ffaa00" : "#44ff88";
-  const ramColor = ram > 80 ? "#ff4444" : ram > 60 ? "#ffaa00" : "#44ff88";
-
-  return (
-    <div className="status-bar">
-      {cpu !== undefined && (
-        <span className="status-item" style={{ color: cpuColor }}>
-          CPU: {Math.round(cpu)}%
-        </span>
-      )}
-      {ram !== undefined && (
-        <span className="status-item" style={{ color: ramColor }}>
-          RAM: {Math.round(ram)}%
-        </span>
-      )}
-      <span className="status-item status-ollama" style={{ color: stats?.ollama_running ? "#44ff88" : "#ff4444" }}>
-        {stats?.ollama_running ? "● Ollama" : "○ Ollama"}
-      </span>
-    </div>
-  );
-}
-
-// ── Chat Panel bileşeni ───────────────────────────────────────────────────────
-
-function ChatPanel({ messages, input, setInput, onSend, loading, onToggleSidebar, onFileDropped, stats, onMicClick, micRecording, voiceEnabled, onToggleVoice }) {
-  const bottomRef = useRef(null);
-  const textareaRef = useRef(null);
-  const [isDragOver, setIsDragOver] = useState(false);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  useEffect(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    ta.style.height = "auto";
-    ta.style.height = Math.min(ta.scrollHeight, 160) + "px";
-  }, [input]);
-
-  const handleKey = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      onSend();
-    }
-  };
-
-  // Drag & Drop handlers
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  };
-  const handleDragLeave = () => setIsDragOver(false);
-  const handleDrop = async (e) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      onFileDropped(files[0]);
-    }
-  };
-
-  return (
-    <main
-      className={`chat-panel ${isDragOver ? "chat-panel--dragover" : ""}`}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
-      {/* Top bar */}
-      <header className="chat-topbar">
-        <button className="sidebar-toggle" onClick={onToggleSidebar} aria-label="Sidebar aç/kapat">
-          ☰
-        </button>
-        <div className="chat-title">ARIA</div>
-        <div className="topbar-right">
-          <StatusBar stats={stats} />
-          <div className="zero-cloud-badge">zero-cloud</div>
-        </div>
-      </header>
-
-      {/* Drag overlay */}
-      {isDragOver && (
-        <div className="drag-overlay">
-          <div className="drag-overlay-text">Dosyayı bırak — analiz edilecek</div>
-        </div>
-      )}
-
-      {/* Mesajlar */}
-      <section className="messages-area">
-        {messages.length === 0 && (
-          <div className="empty-state">
-            <div className="empty-icon">◈</div>
-            <div className="empty-title">Merhaba, Meriç.</div>
-            <div className="empty-sub">Ne yapmamı istersin?</div>
-          </div>
-        )}
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
-        ))}
-        <div ref={bottomRef} />
-      </section>
-
-      {/* Input alanı */}
-      <section className="composer">
-        <div className="composer-inner">
-          <textarea
-            ref={textareaRef}
-            className="composer-input"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKey}
-            placeholder="Bir şey sor... (veya dosya sürükle-bırak)"
-            rows={1}
-            disabled={loading}
-          />
-          <div className="composer-actions">
-            <button
-              className={`btn-mic ${micRecording ? "btn-mic--active" : ""}`}
-              onClick={onMicClick}
-              title={micRecording ? "Kaydediliyor... (durdurmak için tıkla)" : "Ses girişi"}
-              aria-label="Mikrofon"
-              type="button"
-            >
-              {micRecording ? "⏹" : "🎤"}
-            </button>
-            <button
-              className={`btn-voice ${voiceEnabled ? "btn-voice--on" : "btn-voice--off"}`}
-              onClick={onToggleVoice}
-              title={voiceEnabled ? "Ses açık — kapat" : "Ses kapalı — aç"}
-              aria-label="Ses toggle"
-              type="button"
-            >
-              {voiceEnabled ? "🔊" : "🔇"}
-            </button>
-            <button
-              className="btn-send"
-              onClick={onSend}
-              disabled={loading || !input.trim()}
-              aria-label="Gönder"
-              type="button"
-            >
-              {loading ? (
-                <span className="send-spinner" />
-              ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="22" y1="2" x2="11" y2="13" />
-                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                </svg>
-              )}
-            </button>
-          </div>
-        </div>
-        <div className="composer-hint">
-          Enter: gönder &nbsp;·&nbsp; Shift+Enter: satır atla &nbsp;·&nbsp; Dosya sürükleyebilirsin
-        </div>
-      </section>
-    </main>
-  );
+function dateStr(date) {
+  return date.toISOString().slice(0, 10);
 }
 
 // ── Ana uygulama ──────────────────────────────────────────────────────────────
@@ -361,12 +142,14 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [systemStats, setSystemStats] = useState(null);
   const [micRecording, setMicRecording] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(() => {
     return localStorage.getItem("aria-voice") !== "false";
   });
+  const [isDragOver, setIsDragOver] = useState(false);
+  const bottomRef = useRef(null);
+  const textareaRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
@@ -379,6 +162,19 @@ export default function App() {
       return next;
     });
   }, []);
+
+  // Auto-scroll
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Textarea auto-resize
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+  }, [input]);
 
   // ── Oturumları yükle ────────────────────────────────────────────────────────
   const fetchSessions = useCallback(async () => {
@@ -458,7 +254,6 @@ export default function App() {
   const handleQuickCommand = async (action, label) => {
     const ariaId = newId();
 
-    // Kullanıcı mesajı göster
     setMessages((prev) => [
       ...prev,
       { id: newId(), role: "user", content: label, agent: "chat" },
@@ -526,10 +321,9 @@ export default function App() {
     }
   };
 
-  // ── Mikrofon — Python backend üzerinden kayıt (WKWebView bypass) ────────────
+  // ── Mikrofon ─────────────────────────────────────────────────────────────────
   const handleMicClick = async () => {
     if (micRecording) {
-      // Kaydı durdur → transkript al
       setMicRecording(false);
       try {
         const res = await fetch(`${API_URL}/speech/record/stop`, { method: "POST" });
@@ -546,7 +340,6 @@ export default function App() {
     }
 
     try {
-      // Python backend'de kaydı başlat (sounddevice ile)
       const res = await fetch(`${API_URL}/speech/record/start`, { method: "POST" });
       if (res.ok) {
         const data = await res.json();
@@ -566,7 +359,7 @@ export default function App() {
     const ariaId = newId();
     setMessages((prev) => [
       ...prev,
-      { id: newId(), role: "user", content: `📎 Dosya: ${file.name}`, agent: "chat" },
+      { id: newId(), role: "user", content: `[FILE] ${file.name}`, agent: "chat" },
       { id: ariaId, role: "aria", content: "", agent: "analyst", streaming: true },
     ]);
     setLoading(true);
@@ -599,6 +392,21 @@ export default function App() {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ── Drag & Drop handlers ──────────────────────────────────────────────────────
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+  const handleDragLeave = () => setIsDragOver(false);
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      handleFileDropped(files[0]);
     }
   };
 
@@ -674,7 +482,7 @@ export default function App() {
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === ariaId
-                  ? { ...m, content: `⚠️ ${token.slice(8)}`, streaming: false }
+                  ? { ...m, content: `[ERR] ${token.slice(8)}`, streaming: false }
                   : m
               )
             );
@@ -715,7 +523,7 @@ export default function App() {
             m.id === ariaId
               ? {
                   ...m,
-                  content: "⚠️ Backend bağlantısı yok. API ayakta mı? (`aria serve`)",
+                  content: "[ERR] Backend bağlantısı yok. API ayakta mı? (`aria serve`)",
                   streaming: false,
                 }
               : m
@@ -726,7 +534,7 @@ export default function App() {
           {
             id: newId(),
             role: "aria",
-            content: "⚠️ Backend bağlantısı yok. API ayakta mı? (`aria serve`)",
+            content: "[ERR] Backend bağlantısı yok. API ayakta mı? (`aria serve`)",
             agent: "chat",
           },
         ];
@@ -741,70 +549,296 @@ export default function App() {
     }
   };
 
+  const handleKey = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  // ── Hesaplanan değerler ───────────────────────────────────────────────────────
+  const cpu = systemStats?.system?.cpu_percent;
+  const ram = systemStats?.system?.ram_percent;
+  const disk = systemStats?.system?.disk_percent;
+  const ollamaOnline = systemStats?.ollama_running ?? false;
+  const modelName = systemStats?.model || "qwen2.5:7b";
+  const activeSession = sessions.find((s) => s.id === activeSessionId);
+  const activeAgent = messages.length > 0
+    ? messages.filter((m) => m.role === "aria").slice(-1)[0]?.agent || "chat"
+    : "chat";
+
+  const groupedSessions = groupSessionsByDate(sessions);
+
+  // ── Timestamp yardımcısı ──────────────────────────────────────────────────────
+  const fmtTime = (msg) => {
+    if (!msg.timestamp) return new Date().toLocaleTimeString("tr-TR", { hour12: false });
+    return new Date(msg.timestamp).toLocaleTimeString("tr-TR", { hour12: false });
+  };
+
   return (
-    <div className="app">
-      <Sidebar
-        sessions={sessions}
-        activeSessionId={activeSessionId}
-        onNewSession={handleNewSession}
-        onSelectSession={handleSelectSession}
-        sidebarOpen={sidebarOpen}
-        onToggle={() => setSidebarOpen((v) => !v)}
-        onQuickCommand={handleQuickCommand}
-      />
-      <ChatPanel
-        messages={messages}
-        input={input}
-        setInput={setInput}
-        onSend={sendMessage}
-        loading={loading}
-        onToggleSidebar={() => setSidebarOpen((v) => !v)}
-        onFileDropped={handleFileDropped}
-        stats={systemStats}
-        onMicClick={handleMicClick}
-        micRecording={micRecording}
-        voiceEnabled={voiceEnabled}
-        onToggleVoice={toggleVoice}
-      />
+    <div
+      className={`hud-root${isDragOver ? " hud-root--dragover" : ""}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* ═══ TOP BAR ═══════════════════════════════════════════════════════════ */}
+      <header className="topbar">
+        <div className="topbar-left">
+          <span className="topbar-logo">◈ ARIA</span>
+        </div>
+        <div className="topbar-center">
+          <span className="topbar-model">⬡ {modelName}</span>
+          {cpu !== undefined && (
+            <span className={`topbar-stat${cpu > 80 ? " topbar-stat--warn" : ""}`}>
+              CPU: {Math.round(cpu)}%
+            </span>
+          )}
+          {ram !== undefined && (
+            <span className={`topbar-stat${ram > 80 ? " topbar-stat--warn" : ""}`}>
+              RAM: {Math.round(ram)}%
+            </span>
+          )}
+          <span className={`topbar-ollama${ollamaOnline ? " topbar-ollama--on" : " topbar-ollama--off"}`}>
+            {ollamaOnline ? "● OLLAMA" : "○ OLLAMA"}
+          </span>
+        </div>
+        <div className="topbar-right">
+          <DigitalClock />
+        </div>
+      </header>
+
+      {/* ═══ MAIN GRID ══════════════════════════════════════════════════════════ */}
+      <div className="hud-grid">
+
+        {/* ─── LEFT PANEL ────────────────────────────────────────────────────── */}
+        <aside className="panel panel-left">
+
+          {/* SYSTEM STATUS */}
+          <div className="panel-section">
+            <div className="panel-header">
+              <span className="panel-dot" />
+              SYSTEM STATUS
+            </div>
+
+            <div className="stat-row">
+              <span className="stat-label">CPU</span>
+              <div className="stat-bar-wrap">
+                <div
+                  className={`stat-bar-fill${cpu > 80 ? " stat-bar-fill--warn" : ""}`}
+                  style={{ width: `${Math.min(cpu || 0, 100)}%` }}
+                />
+              </div>
+              <span className="stat-val">{cpu !== undefined ? `${Math.round(cpu)}%` : "--"}</span>
+            </div>
+
+            <div className="stat-row">
+              <span className="stat-label">RAM</span>
+              <div className="stat-bar-wrap">
+                <div
+                  className={`stat-bar-fill${ram > 80 ? " stat-bar-fill--warn" : ""}`}
+                  style={{ width: `${Math.min(ram || 0, 100)}%` }}
+                />
+              </div>
+              <span className="stat-val">{ram !== undefined ? `${Math.round(ram)}%` : "--"}</span>
+            </div>
+
+            <div className="stat-row">
+              <span className="stat-label">DSK</span>
+              <div className="stat-bar-wrap">
+                <div
+                  className={`stat-bar-fill${disk > 80 ? " stat-bar-fill--warn" : ""}`}
+                  style={{ width: `${Math.min(disk || 0, 100)}%` }}
+                />
+              </div>
+              <span className="stat-val">{disk !== undefined ? `${Math.round(disk)}%` : "--"}</span>
+            </div>
+          </div>
+
+          {/* SESSION LOG */}
+          <div className="panel-section panel-section--grow">
+            <div className="panel-header">
+              SESSION LOG
+            </div>
+
+            <button className="new-session-btn" onClick={handleNewSession}>
+              + NEW SESSION
+            </button>
+
+            <nav className="session-list">
+              {groupedSessions.length === 0 && (
+                <div className="session-empty">NO SESSIONS</div>
+              )}
+              {groupedSessions.map(({ label, items }) => (
+                <div key={label} className="session-group">
+                  <div className="session-group-label">{label.toUpperCase()}</div>
+                  {items.map((session) => (
+                    <button
+                      key={session.id}
+                      className={`session-item${session.id === activeSessionId ? " session-item--active" : ""}`}
+                      onClick={() => handleSelectSession(session.id)}
+                      title={session.title}
+                    >
+                      <span className="session-indicator">
+                        {session.id === activeSessionId ? "▶" : "·"}
+                      </span>
+                      <span className="session-title">{session.title}</span>
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </nav>
+          </div>
+        </aside>
+
+        {/* ─── CENTER PANEL (COMMUNICATION FEED) ─────────────────────────────── */}
+        <main className="panel panel-center">
+          <div className="panel-header">
+            <span className="panel-dot" />
+            COMMUNICATION FEED
+            {loading && <span className="feed-streaming">STREAMING</span>}
+          </div>
+
+          <div className="feed-area">
+            {messages.length === 0 && (
+              <div className="feed-empty">
+                <div className="feed-empty-icon">◈</div>
+                <div className="feed-empty-title">ARIA COMMAND INTERFACE</div>
+                <div className="feed-empty-sub">AWAITING INPUT — SYSTEM READY</div>
+              </div>
+            )}
+
+            {messages.map((msg) => {
+              const isUser = msg.role === "user";
+              const agentLabel = msg.agent && msg.agent !== "chat" ? msg.agent.toUpperCase() : null;
+              const ts = new Date().toLocaleTimeString("tr-TR", { hour12: false });
+
+              return (
+                <div
+                  key={msg.id}
+                  className={`feed-entry${isUser ? " feed-entry--user" : " feed-entry--aria"}`}
+                >
+                  <div className="feed-entry-header">
+                    <span className="feed-ts">[{ts}]</span>
+                    <span className="feed-prefix">{isUser ? "▶" : "◈"}</span>
+                    <span className="feed-sender">{isUser ? "YOU" : "ARIA"}</span>
+                    {agentLabel && (
+                      <span className="feed-agent-badge">{agentLabel}</span>
+                    )}
+                    <span className="feed-divider">────────────────────</span>
+                  </div>
+                  <div className="feed-content">
+                    {msg.streaming && !msg.content ? (
+                      <span className="feed-waiting">█</span>
+                    ) : isUser ? (
+                      <span className="feed-user-text">{msg.content}</span>
+                    ) : (
+                      <MarkdownContent content={msg.content} />
+                    )}
+                    {msg.streaming && msg.content && (
+                      <span className="stream-cursor">█</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={bottomRef} />
+          </div>
+
+          {/* Drag overlay */}
+          {isDragOver && (
+            <div className="drag-overlay">
+              <div className="drag-overlay-text">DROP FILE — ANALYSIS QUEUED</div>
+            </div>
+          )}
+        </main>
+
+        {/* ─── RIGHT PANEL ───────────────────────────────────────────────────── */}
+        <aside className="panel panel-right">
+
+          {/* AGENT STATUS */}
+          <div className="panel-section">
+            <div className="panel-header">
+              AGENT STATUS
+            </div>
+            <div className="agent-status-box">
+              <div className="agent-active-dot" />
+              <div className="agent-active-name">{activeAgent.toUpperCase()}</div>
+              <div className="agent-active-label">ACTIVE AGENT</div>
+            </div>
+          </div>
+
+          {/* QUICK ACCESS */}
+          <div className="panel-section">
+            <div className="panel-header">
+              QUICK ACCESS
+            </div>
+            <div className="quick-access-list">
+              {QUICK_COMMANDS.map((cmd) => (
+                <button
+                  key={cmd.action}
+                  className="quick-access-btn"
+                  onClick={() => handleQuickCommand(cmd.action, cmd.label)}
+                  disabled={loading}
+                >
+                  {cmd.label.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+
+        </aside>
+      </div>
+
+      {/* ═══ INPUT BAR ══════════════════════════════════════════════════════════ */}
+      <footer className="input-bar">
+        <div className="input-row">
+          <span className="input-prefix">▶</span>
+          <textarea
+            ref={textareaRef}
+            className="input-field"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKey}
+            placeholder="ENTER COMMAND — SHIFT+ENTER FOR NEWLINE — DRAG & DROP FILES"
+            rows={1}
+            disabled={loading}
+          />
+          <div className="input-actions">
+            <button
+              className={`btn-action btn-mic${micRecording ? " btn-mic--active" : ""}`}
+              onClick={handleMicClick}
+              title={micRecording ? "Kaydediliyor — durdurmak için tıkla" : "Ses girişi"}
+              type="button"
+            >
+              {micRecording ? "⏹" : "🎤"}
+            </button>
+            <button
+              className={`btn-action btn-voice${voiceEnabled ? " btn-voice--on" : " btn-voice--off"}`}
+              onClick={toggleVoice}
+              title={voiceEnabled ? "Ses açık — kapat" : "Ses kapalı — aç"}
+              type="button"
+            >
+              {voiceEnabled ? "🔊" : "🔇"}
+            </button>
+            <button
+              className="btn-execute"
+              onClick={sendMessage}
+              disabled={loading || !input.trim()}
+              type="button"
+            >
+              {loading ? <span className="execute-spinner" /> : "EXECUTE"}
+            </button>
+          </div>
+        </div>
+        <div className="input-statusbar">
+          <span className="input-protocol">◈ SECURE ARIA PROTOCOL</span>
+          <span className="input-divider-line" />
+          <span className={`input-ollama${ollamaOnline ? " input-ollama--on" : " input-ollama--off"}`}>
+            OLLAMA: {ollamaOnline ? "ONLINE" : "OFFLINE"}
+          </span>
+        </div>
+      </footer>
     </div>
   );
-}
-
-// ── Yardımcı: oturumları tarihe göre grupla ───────────────────────────────────
-
-function groupSessionsByDate(sessions) {
-  if (!sessions.length) return [];
-
-  const now = new Date();
-  const todayStr = dateStr(now);
-  const yesterdayStr = dateStr(new Date(now - 86_400_000));
-  const weekAgo = new Date(now - 7 * 86_400_000);
-
-  const groups = {};
-
-  for (const s of sessions) {
-    const d = new Date(s.updated_at + "Z");
-    const ds = dateStr(d);
-
-    let label;
-    if (ds === todayStr) label = "Bugün";
-    else if (ds === yesterdayStr) label = "Dün";
-    else if (d >= weekAgo) label = "Bu Hafta";
-    else label = d.toLocaleDateString("tr-TR", { month: "long", year: "numeric" });
-
-    if (!groups[label]) groups[label] = [];
-    groups[label].push(s);
-  }
-
-  const order = ["Bugün", "Dün", "Bu Hafta"];
-  const keys = [
-    ...order.filter((k) => groups[k]),
-    ...Object.keys(groups).filter((k) => !order.includes(k)),
-  ];
-
-  return keys.map((label) => ({ label, items: groups[label] }));
-}
-
-function dateStr(date) {
-  return date.toISOString().slice(0, 10);
 }
