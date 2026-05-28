@@ -662,6 +662,44 @@ async def whatsapp_status_endpoint(x_api_key: str | None = Header(default=None))
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+# ── Brief endpoint'leri ─────────────────────────────────────────────────────
+
+@app.post("/brief/morning")
+async def morning_brief_endpoint(x_api_key: str | None = Header(default=None)):
+    """Sabah briefini üret ve Yelda ile seslendir.
+
+    Alarm tarafından otomatik tetiklenir. Frontend'den de çağrılabilir.
+    """
+    _check_auth(x_api_key)
+    try:
+        from ARIA.agents.brief import BriefAgent
+        agent = BriefAgent()
+        brief_text = agent.run(speak=True)
+        return {"success": True, "brief": brief_text}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/brief/calendar")
+async def calendar_today_endpoint(x_api_key: str | None = Header(default=None)):
+    """Bugünkü takvim etkinliklerini döndür."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.calendar_tools import get_today_events, get_week_events, format_today_events
+        today = get_today_events()
+        week = get_week_events()
+        formatted = format_today_events()
+        return {
+            "today": today,
+            "week": week,
+            "formatted": formatted,
+            "today_count": len(today),
+            "week_count": len(week),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 # ── Alarm endpoint'leri ─────────────────────────────────────────────────────
 
 class AlarmSetRequest(BaseModel):

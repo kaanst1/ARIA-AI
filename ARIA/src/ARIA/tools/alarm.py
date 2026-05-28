@@ -1,4 +1,4 @@
-"""Alarm ve timer — macOS `at` komutu + osascript bildirim + TTS."""
+"""Alarm ve timer — macOS `at` komutu + osascript bildirim + TTS + sabah briefi."""
 
 from __future__ import annotations
 
@@ -11,6 +11,9 @@ from typing import Optional
 from ARIA.core.registry import register_tool
 
 logger = logging.getLogger("aria.tools.alarm")
+
+# Sabah alarmlarında otomatik brief tetiklensin mi? (True = tetikle)
+MORNING_BRIEF_ON_ALARM = True
 
 
 def _now() -> datetime:
@@ -42,16 +45,41 @@ def _parse_time(time_str: str) -> Optional[datetime]:
     return None
 
 
-def _schedule_with_at(target: datetime, message: str) -> dict:
+def _is_morning_alarm(target: datetime) -> bool:
+    """Alarm sabah saatinde mi? (05:00–12:00)"""
+    return 5 <= target.hour <= 12
+
+
+def _trigger_morning_brief() -> None:
+    """Sabah briefini arka planda başlat — takvim + sistem + seslendir."""
+    try:
+        logger.info("Sabah briefi tetikleniyor")
+        from ARIA.agents.brief import BriefAgent
+        agent = BriefAgent()
+        agent.run(speak=True)
+    except Exception as exc:
+        logger.error("Sabah briefi başlatılamadı: %s", exc)
+
+
+def _schedule_with_at(target: datetime, message: str, morning_brief: bool = False) -> dict:
     """macOS `at` komutu ile belirli saatte script çalıştır."""
     at_time = target.strftime("%H:%M")
 
-    # Alarm script: bildirim + TTS
     safe_msg = message.replace('"', '\\"').replace("'", "\\'")
-    script = (
-        f'osascript -e \'display notification "{safe_msg}" with title "◈ ARIA ALARM" sound name "Glass"\' ; '
-        f'say -v Yelda "{safe_msg}"'
-    )
+
+    # Temel alarm: bildirim + TTS
+    script_parts = [
+        f'osascript -e \'display notification "{safe_msg}" with title "◈ ARIA ALARM" sound name "Glass"\'',
+        f'say -v Yelda "{safe_msg}"',
+    ]
+
+    # Sabah alarmı: brief de tetikle (curl ile API'ye istek)
+    if morning_brief and MORNING_BRIEF_ON_ALARM:
+        script_parts.append(
+            "sleep 3 && curl -s -X POST http://localhost:8000/brief/morning > /dev/null 2>&1"
+        )
+
+    script = " ; ".join(script_parts)
 
     try:
         proc = subprocess.run(
@@ -67,16 +95,19 @@ def _schedule_with_at(target: datetime, message: str) -> dict:
                 "time": at_time,
                 "message": message,
                 "detail": proc.stderr.strip() or "Alarm kuruldu",
+                "morning_brief": morning_brief,
             }
         else:
             # at başarısız → threading ile fallback
-            return _schedule_with_threading(target, message)
+            return _schedule_with_threading(target, message, morning_brief=morning_brief)
     except Exception as exc:
         logger.warning("at komutu başarısız: %s, threading'e geçiliyor", exc)
-        return _schedule_with_threading(target, message)
+        return _schedule_with_threading(target, message, morning_brief=morning_brief)
 
 
-def _schedule_with_threading(target: datetime, message: str) -> dict:
+def _schedule_with_threading(
+    target: datetime, message: str, morning_brief: bool = False
+) -> dict:
     """threading.Timer ile alarm — API süresince geçerli."""
     import threading
 
@@ -85,14 +116,23 @@ def _schedule_with_threading(target: datetime, message: str) -> dict:
         return {"success": False, "error": "Geçmiş zaman"}
 
     def fire():
+        # 1. Bildirim
         safe_msg = message.replace('"', '\\"')
         subprocess.run(
             ["osascript", "-e",
              f'display notification "{safe_msg}" with title "◈ ARIA ALARM" sound name "Glass"'],
             capture_output=True,
         )
+        # 2. Yelda TTS
         subprocess.run(["say", "-v", "Yelda", message], capture_output=True)
         logger.info("Alarm çaldı: %s", message)
+
+        # 3. Sabah briefi
+        if morning_brief and MORNING_BRIEF_ON_ALARM:
+            import time
+            time.sleep(3)  # TTS bitsin
+            brief_thread = threading.Thread(target=_trigger_morning_brief, daemon=True)
+            brief_thread.start()
 
     t = threading.Timer(delay, fire)
     t.daemon = True
@@ -103,24 +143,37 @@ def _schedule_with_threading(target: datetime, message: str) -> dict:
         "time": target.strftime("%H:%M"),
         "message": message,
         "detail": f"Alarm kuruldu (threading, {int(delay//60)} dakika sonra)",
+        "morning_brief": morning_brief,
     }
 
 
-def set_alarm(time_str: str, message: str = "Alarm vakti!") -> dict:
+def set_alarm(
+    time_str: str,
+    message: str = "Günaydın! ARIA sabah alarmı.",
+    morning_brief: bool = False,
+) -> dict:
     """Belirtilen saatte macOS bildirimi + Yelda sesiyle alarm kur.
 
     Args:
         time_str: Saat (örn: '10:00', '10', '22:30')
         message: Alarm mesajı
+        morning_brief: True → alarm çalınca sabah briefi de başlat
     """
     target = _parse_time(time_str)
     if not target:
         return {"success": False, "error": f"Saat formatı anlaşılamadı: {time_str}"}
 
-    minutes_left = int((target - _now()).total_seconds() / 60)
-    logger.info("Alarm: %s için '%s' (%d dk sonra)", target.strftime("%H:%M"), message, minutes_left)
+    # Sabah saatiyse morning_brief otomatik True
+    if _is_morning_alarm(target):
+        morning_brief = True
 
-    result = _schedule_with_at(target, message)
+    minutes_left = int((target - _now()).total_seconds() / 60)
+    logger.info(
+        "Alarm: %s için '%s' (%d dk sonra, brief=%s)",
+        target.strftime("%H:%M"), message, minutes_left, morning_brief,
+    )
+
+    result = _schedule_with_at(target, message, morning_brief=morning_brief)
     result["minutes_left"] = minutes_left
     return result
 
@@ -131,7 +184,7 @@ def set_timer(minutes: int, message: str = "Süre doldu!") -> dict:
         return {"success": False, "error": "Süre 0'dan büyük olmalı"}
 
     target = _now() + timedelta(minutes=minutes)
-    result = _schedule_with_threading(target, message)
+    result = _schedule_with_threading(target, message, morning_brief=False)
     result["minutes_left"] = minutes
     return result
 
@@ -161,8 +214,8 @@ def cancel_alarm(job_id: int) -> dict:
 # ── Tool kayıtları ────────────────────────────────────────────────────────────
 
 @register_tool("set_alarm")
-def set_alarm_tool(time_str: str, message: str = "Alarm vakti!") -> dict:
-    """Belirtilen saatte alarm kur (örn: '10:00')."""
+def set_alarm_tool(time_str: str, message: str = "Günaydın! ARIA sabah alarmı.") -> dict:
+    """Belirtilen saatte alarm kur (örn: '10:00'). Sabah saatlerinde otomatik brief tetikler."""
     return set_alarm(time_str, message)
 
 

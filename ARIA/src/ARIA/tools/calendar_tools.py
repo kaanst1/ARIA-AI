@@ -114,12 +114,15 @@ def _parse_events(raw: str) -> list[dict]:
         parts = entry.split("|||")
         if len(parts) < 5:
             continue
+        raw_location = parts[4].strip()
+        # AppleScript "missing value" → None
+        location = None if (not raw_location or raw_location.lower() == "missing value") else raw_location
         events.append({
             "title": parts[0].strip(),
             "start": parts[1].strip(),
             "end": parts[2].strip(),
             "calendar": parts[3].strip(),
-            "location": parts[4].strip() or None,
+            "location": location,
         })
 
     # Saate göre sırala

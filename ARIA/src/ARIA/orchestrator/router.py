@@ -97,6 +97,15 @@ class Orchestrator:
             ("writer", ["makale", "tweet", "rapor", "haber", "içerik"]),
         ]
 
+        # ── Günaydın / sabah briefi tespiti ──────────────────────────────────
+        morning_triggers = [
+            "günaydın", "gunaydin", "iyi sabahlar", "sabah briefi",
+            "sabahın hayırlı", "sabah özeti", "briefi ver", "briefi başlat",
+            "günaydın aria", "good morning",
+        ]
+        if any(k in text for k in morning_triggers):
+            return {"agent": "brief", "reason": "sabah selamlaşma / brief talebi"}
+
         # ── Alarm / timer özel tespiti ───────────────────────────────────────
         alarm_triggers = [
             "alarm kur", "alarm ayarla", "alarm set", "saat", "da alarm",
