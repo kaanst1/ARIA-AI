@@ -586,6 +586,48 @@ async def calendar_add(req: CalendarAddRequest, x_api_key: str | None = Header(d
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+# ── TTS endpoint'leri ────────────────────────────────────────────────────────
+
+class SpeakRequest(BaseModel):
+    text: str
+    lang: Optional[str] = None  # None → otomatik tespit
+
+
+@app.post("/speak")
+async def speak_endpoint(req: SpeakRequest, x_api_key: str | None = Header(default=None)):
+    """Metni Yelda (TR) veya Samantha (EN) ile seslendir."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.tts import speak
+        speak(req.text, lang=req.lang, block=False)
+        return {"success": True, "speaking": True}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/speak/stop")
+async def speak_stop(x_api_key: str | None = Header(default=None)):
+    """Aktif sesi durdur."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.tts import stop_speaking
+        stop_speaking()
+        return {"success": True, "speaking": False}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/speak/status")
+async def speak_status(x_api_key: str | None = Header(default=None)):
+    """Konuşma durumunu döndür."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.tts import is_speaking
+        return {"speaking": is_speaking()}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 # ── WhatsApp endpoint'leri ───────────────────────────────────────────────────
 
 class WhatsAppSendRequest(BaseModel):

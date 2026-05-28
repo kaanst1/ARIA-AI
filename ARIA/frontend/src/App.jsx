@@ -216,7 +216,7 @@ function StatusBar({ stats }) {
 
 // ── Chat Panel bileşeni ───────────────────────────────────────────────────────
 
-function ChatPanel({ messages, input, setInput, onSend, loading, onToggleSidebar, onFileDropped, stats, onMicClick, micRecording }) {
+function ChatPanel({ messages, input, setInput, onSend, loading, onToggleSidebar, onFileDropped, stats, onMicClick, micRecording, voiceEnabled, onToggleVoice }) {
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -319,6 +319,15 @@ function ChatPanel({ messages, input, setInput, onSend, loading, onToggleSidebar
               {micRecording ? "⏹" : "🎤"}
             </button>
             <button
+              className={`btn-voice ${voiceEnabled ? "btn-voice--on" : "btn-voice--off"}`}
+              onClick={onToggleVoice}
+              title={voiceEnabled ? "Ses açık — kapat" : "Ses kapalı — aç"}
+              aria-label="Ses toggle"
+              type="button"
+            >
+              {voiceEnabled ? "🔊" : "🔇"}
+            </button>
+            <button
               className="btn-send"
               onClick={onSend}
               disabled={loading || !input.trim()}
@@ -355,8 +364,21 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [systemStats, setSystemStats] = useState(null);
   const [micRecording, setMicRecording] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(() => {
+    return localStorage.getItem("aria-voice") !== "false";
+  });
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+
+  // Ses toggle — localStorage'a kaydet
+  const toggleVoice = useCallback(() => {
+    setVoiceEnabled((prev) => {
+      const next = !prev;
+      localStorage.setItem("aria-voice", String(next));
+      if (!next) fetch(`${API_URL}/speak/stop`, { method: "POST" }).catch(() => {});
+      return next;
+    });
+  }, []);
 
   // ── Oturumları yükle ────────────────────────────────────────────────────────
   const fetchSessions = useCallback(async () => {
@@ -669,6 +691,21 @@ export default function App() {
         }
       }
 
+      // Stream bitti — cevabı seslendir
+      if (voiceEnabled) {
+        setMessages((prev) => {
+          const ariaMsg = prev.find((m) => m.id === ariaId);
+          if (ariaMsg?.content) {
+            fetch(`${API_URL}/speak`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text: ariaMsg.content }),
+            }).catch(() => {});
+          }
+          return prev;
+        });
+      }
+
       fetchSessions();
     } catch {
       setMessages((prev) => {
@@ -726,6 +763,8 @@ export default function App() {
         stats={systemStats}
         onMicClick={handleMicClick}
         micRecording={micRecording}
+        voiceEnabled={voiceEnabled}
+        onToggleVoice={toggleVoice}
       />
     </div>
   );

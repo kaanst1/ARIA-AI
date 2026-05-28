@@ -562,6 +562,24 @@
   color: var(--text);
 }
 
+.btn-voice {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-voice--on  { color: #3b82f6; }
+.btn-voice--off { color: var(--muted); opacity: 0.5; }
+.btn-voice:hover { background: var(--hover); opacity: 1; }
+
 .btn-send {
   width: 34px;
   height: 34px;
