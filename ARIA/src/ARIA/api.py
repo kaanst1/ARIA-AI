@@ -6,7 +6,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, Header, HTTPException, status as http_status
+from fastapi import FastAPI, File, Header, HTTPException, UploadFile, status as http_status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -76,6 +76,14 @@ async def lifespan(_app: FastAPI):
             logger.info("Wake word dinleme başlatıldı")
     except Exception as exc:
         logger.warning("Wake word başlatılamadı: %s", exc)
+
+    # Global hotkey başlat (Cmd+Shift+Space → ARIA'yı aç)
+    try:
+        from ARIA.tools.global_hotkey import start_global_hotkey
+        start_global_hotkey()
+        logger.info("Global hotkey başlatıldı: Cmd+Shift+Space")
+    except Exception as exc:
+        logger.warning("Global hotkey başlatılamadı: %s", exc)
 
     yield
 
@@ -1496,6 +1504,33 @@ async def document_list_endpoint(x_api_key: str | None = Header(default=None)):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@app.post("/documents/upload")
+async def document_upload_endpoint(
+    file: UploadFile = File(...),
+    x_api_key: str | None = Header(default=None),
+):
+    """Frontend'den dosya yükle ve indeksle."""
+    _check_auth(x_api_key)
+    import tempfile, os
+    from pathlib import Path
+    allowed_exts = {".pdf", ".txt", ".md", ".csv", ".docx", ".json"}
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in allowed_exts:
+        raise HTTPException(status_code=400, detail=f"Desteklenmeyen format: {ext}")
+    try:
+        content = await file.read()
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False, prefix="aria_upload_") as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        from ARIA.tools.document_qa import document_index
+        result = document_index(tmp_path)
+        os.unlink(tmp_path)
+        result["original_filename"] = file.filename
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 # ── Hafıza ────────────────────────────────────────────────────────────────────
 
 class MemoryAddRequest(BaseModel):
@@ -1846,6 +1881,63 @@ async def wake_word_status_endpoint(x_api_key: str | None = Header(default=None)
     try:
         from ARIA.tools.wake_word import is_listening
         return {"listening": is_listening()}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Tam Konfigürasyon API'si ──────────────────────────────────────────────────
+
+class ConfigUpdateRequest(BaseModel):
+    model: str | None = None
+    language: str | None = None
+    tts_voice: str | None = None
+    enable_tts: bool | None = None
+    weather_city: str | None = None
+    enable_speech_input: bool | None = None
+    notification_enabled: bool | None = None
+    conversation_history_limit: int | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
+
+
+@app.get("/config")
+async def config_get(x_api_key: str | None = Header(default=None)):
+    """Tüm konfigürasyonu döndür."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.core.config import load_config
+        cfg = load_config()
+        return {
+            "model": cfg.model,
+            "language": cfg.language,
+            "tts_voice": cfg.tts_voice,
+            "enable_tts": cfg.enable_tts,
+            "weather_city": cfg.weather_city,
+            "enable_speech_input": cfg.enable_speech_input,
+            "notification_enabled": cfg.notification_enabled,
+            "conversation_history_limit": cfg.conversation_history_limit,
+            "temperature": cfg.temperature,
+            "max_tokens": cfg.max_tokens,
+            "cloud_fallback": cfg.cloud_fallback,
+            "telemetry": cfg.telemetry,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.patch("/config")
+async def config_update(req: ConfigUpdateRequest, x_api_key: str | None = Header(default=None)):
+    """Konfigürasyonu güncelle (sadece verilen alanlar değişir)."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.core.config import load_config, save_config
+        cfg = load_config()
+        updates = req.model_dump(exclude_none=True)
+        for key, val in updates.items():
+            if hasattr(cfg, key):
+                setattr(cfg, key, val)
+        save_config(cfg)
+        return {"success": True, "updated": list(updates.keys())}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

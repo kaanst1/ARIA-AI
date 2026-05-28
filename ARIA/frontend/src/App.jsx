@@ -9,6 +9,263 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 let _msgId = 0;
 const newId = () => ++_msgId;
 
+// ── Toast Sistemi ─────────────────────────────────────────────────────────────
+
+let _toastId = 0;
+function ToastContainer({ toasts, onRemove }) {
+  return (
+    <div className="toast-container">
+      {toasts.map((t) => (
+        <div key={t.id} className={`toast toast--${t.type}`} onClick={() => onRemove(t.id)}>
+          <span className="toast-icon">
+            {t.type === "success" ? "✅" : t.type === "error" ? "❌" : t.type === "warn" ? "⚠️" : "ℹ️"}
+          </span>
+          <span className="toast-msg">{t.message}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Keyboard Shortcut Rehberi ─────────────────────────────────────────────────
+
+const SHORTCUTS = [
+  { keys: "Enter", desc: "Mesaj gönder" },
+  { keys: "Shift+Enter", desc: "Yeni satır" },
+  { keys: "Cmd+Shift+Space", desc: "ARIA'yı global aç (sistem geneli)" },
+  { keys: "?", desc: "Bu yardım penceresini aç/kapat" },
+  { keys: "Escape", desc: "Ayarları/yardımı kapat" },
+  { keys: "Ctrl+K", desc: "Yeni oturum aç" },
+  { keys: "Drag & Drop", desc: "Dosya analiz et / belge yükle" },
+];
+
+function ShortcutModal({ onClose }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <span>KEYBOARD SHORTCUTS</span>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          {SHORTCUTS.map((s) => (
+            <div key={s.keys} className="shortcut-row">
+              <kbd className="shortcut-key">{s.keys}</kbd>
+              <span className="shortcut-desc">{s.desc}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Settings Paneli ───────────────────────────────────────────────────────────
+
+function SettingsModal({ onClose, onSave, addToast }) {
+  const [cfg, setCfg] = useState(null);
+  const [models, setModels] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API_URL}/config`).then((r) => r.json()),
+      fetch(`${API_URL}/models`).then((r) => r.json()),
+    ]).then(([config, modelData]) => {
+      setCfg(config);
+      setModels(Array.isArray(modelData) ? modelData : modelData.models || []);
+    }).catch(() => addToast("Konfigürasyon yüklenemedi", "error"));
+  }, []);
+
+  const save = async () => {
+    if (!cfg) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_URL}/config`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cfg),
+      });
+      const data = await res.json();
+      if (data.success) {
+        addToast("Ayarlar kaydedildi", "success");
+        onSave(cfg);
+        onClose();
+      } else {
+        addToast("Kaydetme hatası", "error");
+      }
+    } catch {
+      addToast("API'ye ulaşılamadı", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!cfg) return (
+    <div className="modal-overlay"><div className="modal"><div className="modal-body">Yükleniyor…</div></div></div>
+  );
+
+  const Field = ({ label, field, type = "text", options }) => (
+    <div className="settings-row">
+      <label className="settings-label">{label}</label>
+      {options ? (
+        <select className="settings-input" value={cfg[field] || ""} onChange={(e) => setCfg({ ...cfg, [field]: e.target.value })}>
+          {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      ) : type === "checkbox" ? (
+        <input type="checkbox" className="settings-check" checked={!!cfg[field]} onChange={(e) => setCfg({ ...cfg, [field]: e.target.checked })} />
+      ) : (
+        <input className="settings-input" type={type} value={cfg[field] ?? ""} onChange={(e) => setCfg({ ...cfg, [field]: type === "number" ? Number(e.target.value) : e.target.value })} />
+      )}
+    </div>
+  );
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <span>⚙️ SETTINGS</span>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <div className="settings-section-title">MODEL</div>
+          <Field label="Aktif Model" field="model" options={models.length ? models : [cfg.model]} />
+          <Field label="Sıcaklık (0.0–1.0)" field="temperature" type="number" />
+          <Field label="Max Token" field="max_tokens" type="number" />
+
+          <div className="settings-section-title">SES & DİL</div>
+          <Field label="TTS Aktif" field="enable_tts" type="checkbox" />
+          <Field label="TTS Sesi" field="tts_voice" />
+          <Field label="Ses Girişi (STT)" field="enable_speech_input" type="checkbox" />
+
+          <div className="settings-section-title">SİSTEM</div>
+          <Field label="Hava Durumu Şehri" field="weather_city" />
+          <Field label="Bildirimler" field="notification_enabled" type="checkbox" />
+          <Field label="Konuşma Geçmişi Limiti" field="conversation_history_limit" type="number" />
+        </div>
+        <div className="modal-footer">
+          <button className="modal-btn modal-btn--cancel" onClick={onClose}>İptal</button>
+          <button className="modal-btn modal-btn--save" onClick={save} disabled={saving}>
+            {saving ? "Kaydediliyor…" : "Kaydet"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Belge Yükleme Modalı ──────────────────────────────────────────────────────
+
+function DocumentModal({ onClose, addToast }) {
+  const [indexing, setIndexing] = useState(false);
+  const [indexed, setIndexed] = useState([]);
+  const [query, setQuery] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [querying, setQuerying] = useState(false);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    fetch(`${API_URL}/documents`).then((r) => r.json()).then((d) => setIndexed(d.documents || [])).catch(() => {});
+  }, []);
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer?.files?.[0] || e.target.files?.[0];
+    if (!file) return;
+    const allowed = [".pdf", ".txt", ".md", ".csv", ".docx"];
+    const ext = "." + file.name.split(".").pop().toLowerCase();
+    if (!allowed.includes(ext)) {
+      addToast(`Desteklenmeyen format: ${ext}`, "warn");
+      return;
+    }
+    setIndexing(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`${API_URL}/documents/upload`, { method: "POST", body: form });
+      const data = await res.json();
+      if (data.success) {
+        addToast(`✅ ${file.name} indekslendi (${data.chunks} parça)`, "success");
+        setIndexed((prev) => [...prev, { filename: file.name, chunks: data.chunks }]);
+      } else {
+        addToast(`Hata: ${data.error}`, "error");
+      }
+    } catch {
+      addToast("Yükleme başarısız", "error");
+    } finally {
+      setIndexing(false);
+    }
+  };
+
+  const handleQuery = async () => {
+    if (!query.trim()) return;
+    setQuerying(true);
+    try {
+      const res = await fetch(`${API_URL}/documents/query`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: query }),
+      });
+      const data = await res.json();
+      setAnswer(data.answer || "Cevap alınamadı");
+    } catch {
+      setAnswer("API hatası");
+    } finally {
+      setQuerying(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <span>📄 BELGE Q&A</span>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <div
+            className={`doc-dropzone${indexing ? " doc-dropzone--loading" : ""}`}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <input ref={fileInputRef} type="file" accept=".pdf,.txt,.md,.csv,.docx" style={{ display: "none" }} onChange={handleDrop} />
+            {indexing ? "İndeksleniyor…" : "PDF, TXT, MD, CSV, DOCX yükle — sürükle veya tıkla"}
+          </div>
+          {indexed.length > 0 && (
+            <div className="doc-indexed">
+              <div className="settings-section-title">İndekslendi ({indexed.length})</div>
+              {indexed.map((d) => (
+                <div key={d.filename} className="doc-item">
+                  <span>📄 {d.filename}</span>
+                  <span className="doc-chunks">{d.chunks} parça</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="settings-section-title">SORU SOR</div>
+          <div className="doc-query-row">
+            <input
+              className="settings-input"
+              placeholder="Belgelerinize soru sorun…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleQuery()}
+            />
+            <button className="modal-btn modal-btn--save" onClick={handleQuery} disabled={querying || !query.trim()}>
+              {querying ? "…" : "Sor"}
+            </button>
+          </div>
+          {answer && <div className="doc-answer"><MarkdownContent content={answer} /></div>}
+        </div>
+        <div className="modal-footer">
+          <button className="modal-btn modal-btn--cancel" onClick={onClose}>Kapat</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Markdown render bileşeni ──────────────────────────────────────────────────
 
 function MarkdownContent({ content }) {
@@ -156,11 +413,26 @@ export default function App() {
   const [pinnedMessages, setPinnedMessages] = useState(() => {
     try { return JSON.parse(localStorage.getItem("aria-pins") || "[]"); } catch { return []; }
   });
-  const [artifacts, setArtifacts] = useState([]); // {id, type, content, ts}
+  const [artifacts, setArtifacts] = useState([]);
+  const [toasts, setToasts] = useState([]);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showDocuments, setShowDocuments] = useState(false);
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+
+  // ── Toast sistemi ─────────────────────────────────────────────────────────
+  const addToast = useCallback((message, type = "info", duration = 3500) => {
+    const id = ++_toastId;
+    setToasts((prev) => [...prev.slice(-4), { id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), duration);
+  }, []);
+
+  const removeToast = useCallback((id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   // Ses toggle — localStorage'a kaydet
   const toggleVoice = useCallback(() => {
@@ -390,11 +662,11 @@ export default function App() {
         if (data.success) {
           setMicRecording(true);
         } else {
-          alert(`Mikrofon başlatılamadı: ${data.error}`);
+          addToast(`Mikrofon başlatılamadı: ${data.error}`, "error");
         }
       }
     } catch {
-      alert("API'ye ulaşılamıyor, mikrofon çalışmıyor.");
+      addToast("API'ye ulaşılamıyor, mikrofon çalışmıyor.", "error");
     }
   };
 
@@ -630,6 +902,29 @@ export default function App() {
     }
   };
 
+  // ── Global klavye kısayolları ─────────────────────────────────────────────────
+  useEffect(() => {
+    const onGlobalKey = (e) => {
+      // ? → shortcut rehberi (input odaklı değilse)
+      if (e.key === "?" && document.activeElement !== textareaRef.current) {
+        setShowShortcuts((s) => !s);
+      }
+      // Escape → kapat
+      if (e.key === "Escape") {
+        setShowShortcuts(false);
+        setShowSettings(false);
+        setShowDocuments(false);
+      }
+      // Ctrl+K → yeni oturum
+      if (e.key === "k" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+        e.preventDefault();
+        handleNewSession();
+      }
+    };
+    window.addEventListener("keydown", onGlobalKey);
+    return () => window.removeEventListener("keydown", onGlobalKey);
+  }, []);
+
   // ── Hesaplanan değerler ───────────────────────────────────────────────────────
   const cpu = systemStats?.system?.cpu_percent;
   const ram = systemStats?.system?.ram_percent;
@@ -681,9 +976,20 @@ export default function App() {
           </span>
         </div>
         <div className="topbar-right">
+          <button className="topbar-btn" onClick={() => setShowDocuments(true)} title="Belge Q&A">📄</button>
+          <button className="topbar-btn" onClick={() => setShowSettings(true)} title="Ayarlar">⚙️</button>
+          <button className="topbar-btn" onClick={() => setShowShortcuts(true)} title="Klavye kısayolları (?)">?</button>
           <DigitalClock />
         </div>
       </header>
+
+      {/* ═══ MODALLER ═══════════════════════════════════════════════════════════ */}
+      {showShortcuts && <ShortcutModal onClose={() => setShowShortcuts(false)} />}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} onSave={() => {}} addToast={addToast} />}
+      {showDocuments && <DocumentModal onClose={() => setShowDocuments(false)} addToast={addToast} />}
+
+      {/* ═══ TOAST ══════════════════════════════════════════════════════════════ */}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       {/* ═══ MAIN GRID ══════════════════════════════════════════════════════════ */}
       <div className="hud-grid">
