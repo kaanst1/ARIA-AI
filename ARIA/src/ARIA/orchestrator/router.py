@@ -97,6 +97,15 @@ class Orchestrator:
             ("writer", ["makale", "tweet", "rapor", "haber", "içerik"]),
         ]
 
+        # ── Alarm / timer özel tespiti ───────────────────────────────────────
+        alarm_triggers = [
+            "alarm kur", "alarm ayarla", "alarm set", "saat", "da alarm",
+            "de alarm", "da çal", "de çal", "timer", "dakika sonra",
+            "saat sonra", "hatırlat", "hatırlatıcı", "zil", "uyandır",
+        ]
+        if any(k in text for k in alarm_triggers):
+            return {"agent": "chat", "reason": "alarm/timer komutu"}
+
         # ── WhatsApp özel tespiti ─────────────────────────────────────────────
         if "whatsapp" in text or (
             ("mesaj" in text or "yaz" in text) and

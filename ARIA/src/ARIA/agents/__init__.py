@@ -18,6 +18,7 @@ try:
         shell_runner, clipboard, file_index, rss_reader,
         log_analyzer, github_monitor, translator,
         podcast_summarizer, system_monitor, calendar_tools,
+        alarm,
     )
 except Exception:
     pass

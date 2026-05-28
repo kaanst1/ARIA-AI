@@ -662,6 +662,77 @@ async def whatsapp_status_endpoint(x_api_key: str | None = Header(default=None))
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+# ── Alarm endpoint'leri ─────────────────────────────────────────────────────
+
+class AlarmSetRequest(BaseModel):
+    time_str: str              # "10:00", "10", "22:30"
+    message: str = "Alarm vakti!"
+
+
+class TimerSetRequest(BaseModel):
+    minutes: int
+    message: str = "Süre doldu!"
+
+
+@app.post("/alarm")
+async def alarm_set(req: AlarmSetRequest, x_api_key: str | None = Header(default=None)):
+    """Belirtilen saatte alarm kur."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.alarm import set_alarm
+        result = set_alarm(req.time_str, req.message)
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Alarm kurulamadı"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/timer")
+async def timer_set(req: TimerSetRequest, x_api_key: str | None = Header(default=None)):
+    """N dakika sonra alarm kur."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.alarm import set_timer
+        result = set_timer(req.minutes, req.message)
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Timer kurulamadı"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/alarms")
+async def alarms_list(x_api_key: str | None = Header(default=None)):
+    """Kurulu at alarm'larını listele."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.alarm import list_alarms
+        return list_alarms()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.delete("/alarm/{job_id}")
+async def alarm_cancel(job_id: int, x_api_key: str | None = Header(default=None)):
+    """at alarm'ını iptal et."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.alarm import cancel_alarm
+        result = cancel_alarm(job_id)
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail="Alarm iptal edilemedi")
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
