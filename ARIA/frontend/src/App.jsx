@@ -93,6 +93,8 @@ const QUICK_COMMANDS = [
   { label: "Sistem Durumu", action: "system_status" },
   { label: "Bugün Ne Var", action: "calendar_today" },
   { label: "Panoyu Analiz Et", action: "clipboard_analyze" },
+  { label: "Hava Durumu", action: "weather" },
+  { label: "Smart Inbox", action: "smart_inbox" },
 ];
 
 // ── Yardımcı: oturumları tarihe göre grupla ───────────────────────────────────
@@ -148,6 +150,9 @@ export default function App() {
     return localStorage.getItem("aria-voice") !== "false";
   });
   const [isDragOver, setIsDragOver] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [view, setView] = useState("chat"); // "chat" | "dashboard"
+  const [analytics, setAnalytics] = useState(null);
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -209,6 +214,18 @@ export default function App() {
     const interval = setInterval(fetchStats, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  // ── Analitik verisi çek (dashboard için) ────────────────────────────────────
+  useEffect(() => {
+    if (view !== "dashboard") return;
+    const fetchAnalytics = async () => {
+      try {
+        const res = await fetch(`${API_URL}/analytics/usage`);
+        if (res.ok) setAnalytics(await res.json());
+      } catch { /* sessizce geç */ }
+    };
+    fetchAnalytics();
+  }, [view]);
 
   // ── Yeni sohbet ─────────────────────────────────────────────────────────────
   const handleNewSession = async () => {
@@ -297,6 +314,29 @@ export default function App() {
           });
           const data = await res.json();
           result = data.response || "Brief alınamadı.";
+          break;
+        }
+        case "weather": {
+          const res = await fetch(`${API_URL}/weather`);
+          const data = await res.json();
+          if (data.success) {
+            result = `**${data.city} Hava Durumu**\n- Sıcaklık: ${data.temp_c}°C (hissedilen ${data.feels_like_c}°C)\n- Durum: ${data.desc}\n- Nem: %${data.humidity} | Rüzgar: ${data.wind_kmh} km/s`;
+          } else {
+            result = "Hava durumu alınamadı.";
+          }
+          break;
+        }
+        case "smart_inbox": {
+          const res = await fetch(`${API_URL}/email/smart-inbox?count=10`);
+          const data = await res.json();
+          if (data.success) {
+            let txt = data.summary;
+            if (data.urgent?.length) txt += `\n\n**⚠️ Acil (${data.urgent.length}):** ${data.urgent.map(e => e.subject).join(", ")}`;
+            if (data.meetings?.length) txt += `\n\n**📅 Toplantı İçeren (${data.meetings.length}):** ${data.meetings.map(e => e.subject).join(", ")}`;
+            result = txt;
+          } else {
+            result = "Inbox alınamadı.";
+          }
           break;
         }
         default:
@@ -567,7 +607,10 @@ export default function App() {
     ? messages.filter((m) => m.role === "aria").slice(-1)[0]?.agent || "chat"
     : "chat";
 
-  const groupedSessions = groupSessionsByDate(sessions);
+  const filteredSessions = searchQuery.trim()
+    ? sessions.filter((s) => s.title?.toLowerCase().includes(searchQuery.toLowerCase()))
+    : sessions;
+  const groupedSessions = groupSessionsByDate(filteredSessions);
 
   // ── Timestamp yardımcısı ──────────────────────────────────────────────────────
   const fmtTime = (msg) => {
@@ -665,6 +708,14 @@ export default function App() {
               + NEW SESSION
             </button>
 
+            <input
+              className="session-search"
+              type="text"
+              placeholder="Sohbet ara..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+
             <nav className="session-list">
               {groupedSessions.length === 0 && (
                 <div className="session-empty">NO SESSIONS</div>
@@ -691,15 +742,75 @@ export default function App() {
           </div>
         </aside>
 
-        {/* ─── CENTER PANEL (COMMUNICATION FEED) ─────────────────────────────── */}
+        {/* ─── CENTER PANEL ───────────────────────────────────────────────── */}
         <main className="panel panel-center">
           <div className="panel-header">
             <span className="panel-dot" />
-            COMMUNICATION FEED
-            {loading && <span className="feed-streaming">STREAMING</span>}
+            {view === "dashboard" ? "ANALYTICS DASHBOARD" : "COMMUNICATION FEED"}
+            {loading && view === "chat" && <span className="feed-streaming">STREAMING</span>}
           </div>
 
-          <div className="feed-area">
+          {/* ── DASHBOARD VIEW ── */}
+          {view === "dashboard" && (
+            <div className="dashboard-area">
+              {!analytics ? (
+                <div className="feed-empty"><div className="feed-empty-icon">◈</div><div className="feed-empty-sub">ANALYTICS LOADING...</div></div>
+              ) : (
+                <>
+                  <div className="dash-grid">
+                    <div className="dash-card">
+                      <div className="dash-card-title">TOPLAM MESAJ</div>
+                      <div className="dash-card-value">{analytics.total_messages ?? 0}</div>
+                    </div>
+                    <div className="dash-card">
+                      <div className="dash-card-title">SON 7 GÜN</div>
+                      <div className="dash-card-value">{analytics.last_7_days ?? 0}</div>
+                    </div>
+                    <div className="dash-card">
+                      <div className="dash-card-title">EN AKTİF AJAN</div>
+                      <div className="dash-card-value dash-card-value--sm">{(analytics.top_agent?.name || "—").toUpperCase()}</div>
+                      <div className="dash-card-sub">{analytics.top_agent?.count ?? 0} kullanım</div>
+                    </div>
+                  </div>
+
+                  <div className="dash-section-title">AJAN KULLANIMI</div>
+                  <div className="dash-bars">
+                    {Object.entries(analytics.agent_counts || {})
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([agent, count]) => {
+                        const max = Math.max(...Object.values(analytics.agent_counts));
+                        return (
+                          <div key={agent} className="dash-bar-row">
+                            <span className="dash-bar-label">{agent.toUpperCase()}</span>
+                            <div className="dash-bar-track">
+                              <div className="dash-bar-fill" style={{ width: `${(count / max) * 100}%` }} />
+                            </div>
+                            <span className="dash-bar-count">{count}</span>
+                          </div>
+                        );
+                      })}
+                  </div>
+
+                  <div className="dash-section-title">SAATLİK DAĞILIM</div>
+                  <div className="dash-hourly">
+                    {Array.from({ length: 24 }, (_, h) => {
+                      const count = analytics.hourly_distribution?.[String(h)] || 0;
+                      const max = Math.max(...Object.values(analytics.hourly_distribution || { 0: 1 }), 1);
+                      return (
+                        <div key={h} className="dash-hour-col" title={`${h}:00 — ${count} mesaj`}>
+                          <div className="dash-hour-bar" style={{ height: `${(count / max) * 48}px` }} />
+                          {h % 6 === 0 && <div className="dash-hour-label">{h}:00</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ── CHAT VIEW ── */}
+          {view === "chat" && <div className="feed-area">
             {messages.length === 0 && (
               <div className="feed-empty">
                 <div className="feed-empty-icon">◈</div>
@@ -743,10 +854,10 @@ export default function App() {
               );
             })}
             <div ref={bottomRef} />
-          </div>
+          </div>}
 
           {/* Drag overlay */}
-          {isDragOver && (
+          {isDragOver && view === "chat" && (
             <div className="drag-overlay">
               <div className="drag-overlay-text">DROP FILE — ANALYSIS QUEUED</div>
             </div>
@@ -778,12 +889,31 @@ export default function App() {
                 <button
                   key={cmd.action}
                   className="quick-access-btn"
-                  onClick={() => handleQuickCommand(cmd.action, cmd.label)}
+                  onClick={() => { setView("chat"); handleQuickCommand(cmd.action, cmd.label); }}
                   disabled={loading}
                 >
                   {cmd.label.toUpperCase()}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* VIEW TOGGLE */}
+          <div className="panel-section">
+            <div className="panel-header">VIEW</div>
+            <div className="quick-access-list">
+              <button
+                className={`quick-access-btn${view === "chat" ? " quick-access-btn--active" : ""}`}
+                onClick={() => setView("chat")}
+              >
+                CHAT
+              </button>
+              <button
+                className={`quick-access-btn${view === "dashboard" ? " quick-access-btn--active" : ""}`}
+                onClick={() => setView("dashboard")}
+              >
+                DASHBOARD
+              </button>
             </div>
           </div>
 

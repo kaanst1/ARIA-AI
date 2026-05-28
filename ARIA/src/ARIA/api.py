@@ -50,6 +50,15 @@ async def lifespan(_app: FastAPI):
     except Exception as exc:
         logger.warning("Clipboard monitor başlatılamadı: %s", exc)
 
+    # Workflow scheduler başlat
+    try:
+        from ARIA.automation.workflow_engine import ensure_default_workflows, start_workflow_scheduler
+        ensure_default_workflows()
+        start_workflow_scheduler()
+        logger.info("Workflow scheduler başlatıldı")
+    except Exception as exc:
+        logger.warning("Workflow scheduler başlatılamadı: %s", exc)
+
     yield
 
 
@@ -1360,6 +1369,263 @@ async def session_export(session_id: int, x_api_key: str | None = Header(default
             "message_count": len(messages),
             "messages": messages,
         }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Workflow Motoru ───────────────────────────────────────────────────────────
+
+class WorkflowCreate(BaseModel):
+    name: str
+    description: str = ""
+    trigger: dict
+    steps: list[dict]
+
+
+@app.get("/workflows")
+async def workflows_list(x_api_key: str | None = Header(default=None)):
+    """Tanımlı workflow'ları listele."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.automation.workflow_engine import load_workflows
+        wfs = load_workflows()
+        return {"workflows": [{
+            "name": w.get("name"), "description": w.get("description", ""),
+            "trigger": w.get("trigger", {}), "steps": len(w.get("steps", [])),
+        } for w in wfs], "count": len(wfs)}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/workflows")
+async def workflow_create(wf: WorkflowCreate, x_api_key: str | None = Header(default=None)):
+    """Yeni workflow oluştur."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.automation.workflow_engine import save_workflow
+        path = save_workflow(wf.model_dump())
+        return {"success": True, "name": wf.name, "path": str(path)}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/workflows/{name}/run")
+async def workflow_run(name: str, x_api_key: str | None = Header(default=None)):
+    """Workflow'u elle tetikle."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.automation.workflow_engine import load_workflows, run_workflow
+        wfs = {w.get("name"): w for w in load_workflows()}
+        if name not in wfs:
+            raise HTTPException(status_code=404, detail=f"Workflow bulunamadı: {name}")
+        results = run_workflow(wfs[name])
+        return {"name": name, "results": results}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.delete("/workflows/{name}")
+async def workflow_delete(name: str, x_api_key: str | None = Header(default=None)):
+    """Workflow'u sil."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.automation.workflow_engine import delete_workflow
+        ok = delete_workflow(name)
+        return {"success": ok, "name": name}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Belge Q&A (RAG) ───────────────────────────────────────────────────────────
+
+class DocumentQueryRequest(BaseModel):
+    question: str
+    file_name: str | None = None
+
+
+@app.post("/documents/index")
+async def document_index_endpoint(file_path: str, x_api_key: str | None = Header(default=None)):
+    """Belgeyi RAG için indeksle."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.document_qa import document_index
+        return document_index(file_path)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/documents/query")
+async def document_query_endpoint(req: DocumentQueryRequest, x_api_key: str | None = Header(default=None)):
+    """İndekslenmiş belgelerden soruya cevap al."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.document_qa import document_query
+        return document_query(req.question, req.file_name)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/documents")
+async def document_list_endpoint(x_api_key: str | None = Header(default=None)):
+    """İndekslenmiş belgeleri listele."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.document_qa import document_list
+        return document_list()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Hafıza ────────────────────────────────────────────────────────────────────
+
+class MemoryAddRequest(BaseModel):
+    text: str
+    category: str = "genel"
+
+
+@app.post("/memory")
+async def memory_add_endpoint(req: MemoryAddRequest, x_api_key: str | None = Header(default=None)):
+    """Semantik hafızaya not ekle."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.memory.semantic_context import remember_fact
+        ok = remember_fact(req.text, req.category)
+        return {"success": ok}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/memory/search")
+async def memory_search_endpoint(q: str, n: int = 5, x_api_key: str | None = Header(default=None)):
+    """Semantik hafızada ara."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.memory.vector_memory import memory_search
+        return {"results": memory_search(q, n=n)}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Email Zekası ──────────────────────────────────────────────────────────────
+
+class EmailClassifyRequest(BaseModel):
+    subject: str
+    body: str
+    sender: str = ""
+
+
+class EmailDraftRequest(BaseModel):
+    subject: str
+    body: str
+    sender: str
+    tone: str = "profesyonel"
+
+
+@app.post("/email/classify")
+async def email_classify_endpoint(req: EmailClassifyRequest, x_api_key: str | None = Header(default=None)):
+    """Maili sınıflandır ve öncelik belirle."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.email_intelligence import email_classify
+        return email_classify(req.subject, req.body, req.sender)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/email/draft")
+async def email_draft_endpoint(req: EmailDraftRequest, x_api_key: str | None = Header(default=None)):
+    """Maile otomatik yanıt taslağı üret."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.email_intelligence import email_draft_reply
+        return email_draft_reply(req.subject, req.body, req.sender, req.tone)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/email/smart-inbox")
+async def smart_inbox_endpoint(count: int = 10, x_api_key: str | None = Header(default=None)):
+    """Okunmamış mailleri akıllıca özetle ve önceliklendir."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.mail_control import get_unread_emails
+        from ARIA.tools.email_intelligence import email_summarize
+        raw = get_unread_emails(count)
+        emails = raw if isinstance(raw, list) else []
+        return email_summarize(emails)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Analitik ──────────────────────────────────────────────────────────────────
+
+@app.get("/analytics/usage")
+async def analytics_usage(x_api_key: str | None = Header(default=None)):
+    """Kullanım istatistiklerini döndür."""
+    _check_auth(x_api_key)
+    try:
+        import json
+        from pathlib import Path
+        tracker_file = Path.home() / ".aria" / "usage.json"
+        if not tracker_file.exists():
+            return {"agent_counts": {}, "total_messages": 0, "sessions": []}
+        data = json.loads(tracker_file.read_text())
+
+        # Son 7 günlük trend
+        from datetime import datetime, timedelta
+        cutoff = (datetime.now() - timedelta(days=7)).isoformat()
+        recent = [s for s in data.get("sessions", []) if s.get("timestamp", "") >= cutoff]
+
+        # Saatlik dağılım
+        hourly = {}
+        for s in recent:
+            h = str(s.get("hour", 0))
+            hourly[h] = hourly.get(h, 0) + 1
+
+        # En aktif ajan
+        top_agent = max(data.get("agent_counts", {}).items(), key=lambda x: x[1], default=("chat", 0))
+
+        return {
+            "total_messages": data.get("total_messages", 0),
+            "agent_counts": data.get("agent_counts", {}),
+            "last_7_days": len(recent),
+            "hourly_distribution": hourly,
+            "top_agent": {"name": top_agent[0], "count": top_agent[1]},
+            "sessions": recent[-20:],
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/analytics/patterns")
+async def analytics_patterns(x_api_key: str | None = Header(default=None)):
+    """Kullanım pattern'larını döndür."""
+    _check_auth(x_api_key)
+    try:
+        import json
+        from pathlib import Path
+        patterns_file = Path.home() / ".aria" / "patterns.json"
+        if not patterns_file.exists():
+            return {"patterns": {}}
+        return json.loads(patterns_file.read_text())
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Akıllı Model Durumu ───────────────────────────────────────────────────────
+
+@app.get("/models/smart-select")
+async def smart_select_endpoint(query: str, x_api_key: str | None = Header(default=None)):
+    """Sorgu için hangi modelin seçileceğini göster."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.core.smart_router import classify_complexity, select_model
+        models = engine.list_models()
+        complexity = classify_complexity(query)
+        selected = select_model(query, models, engine.config.model)
+        return {"query": query, "complexity": complexity, "selected_model": selected, "available": models}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

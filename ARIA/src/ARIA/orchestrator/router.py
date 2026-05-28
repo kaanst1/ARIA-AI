@@ -271,6 +271,20 @@ class Orchestrator:
         engine.chat() çağrısına context olarak ekler.
         """
         tracker = UsageTracker()
+
+        # ── Workflow keyword tetikleyicisini kontrol et ───────────────────────
+        try:
+            from ARIA.automation.workflow_engine import check_keyword_triggers, run_workflow
+            wf = check_keyword_triggers(user_input)
+            if wf:
+                self.logger.info("Workflow tetiklendi: %s", wf.get("name"))
+                results = run_workflow(wf)
+                last = next((r["result"] for r in reversed(results) if r.get("success")), "Workflow tamamlandı")
+                tracker.log("workflow", user_input, len(last))
+                return last, {"agent": "workflow", "reason": wf.get("name", "keyword")}
+        except Exception as exc:
+            self.logger.warning("Workflow kontrolü başarısız: %s", exc)
+
         route = self.route(user_input)
         agent_name = route.get("agent", "chat")
 
@@ -290,15 +304,26 @@ class Orchestrator:
         # ── Ajan çalıştır ─────────────────────────────────────────────────────
         agent_cls = get_agent(agent_name)
         if agent_cls:
-            # Ajan varsa handle() çağır — basit bir string döner
             response = agent_cls().handle(user_input)
         else:
-            # Doğrudan LLM — context mesajlarını ekle
             messages: list[dict] = []
             if context_messages:
                 messages.extend(context_messages)
             messages.append({"role": "user", "content": user_input})
-            response = self.engine.chat(messages)
+
+            # Semantik hafıza bağlamını enjekte et
+            try:
+                from ARIA.memory.semantic_context import inject_into_messages
+                messages = inject_into_messages(messages, user_input, agent_name)
+            except Exception:
+                pass
+
+            # Akıllı model seçimi
+            try:
+                from ARIA.core.smart_router import SmartEngine
+                response = SmartEngine().chat(messages, query_hint=user_input)
+            except Exception:
+                response = self.engine.chat(messages)
 
         # ── Self-reflection ──────────────────────────────────────────────────
         try:
@@ -307,6 +332,13 @@ class Orchestrator:
             response = reflector.reflect(user_input, response)
         except Exception as exc:
             self.logger.warning("Self-reflection hatası: %s", exc)
+
+        # ── Konuşmayı semantik hafızaya kaydet ───────────────────────────────
+        try:
+            from ARIA.memory.semantic_context import save_exchange
+            save_exchange(user_input, response, agent=agent_name)
+        except Exception:
+            pass
 
         tracker.log(agent_name, user_input, len(response))
         return response, route

@@ -21,7 +21,7 @@ try:
         alarm, reminders, spotify_control, screen_capture,
         mail_control, weather, notes, app_control,
         contacts, focus_mode, browser_control, spotlight_search,
-        clipboard_history,
+        clipboard_history, document_qa, email_intelligence,
     )
 except Exception:
     pass
