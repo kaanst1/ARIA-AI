@@ -33,13 +33,55 @@ def _get_calendar_data() -> tuple[list[dict], list[dict]]:
         from ARIA.tools.calendar_tools import get_today_events, get_week_events
         today = get_today_events()
         week = get_week_events()
-        # Bugünküleri haftalık listeden çıkar (mükerrer olmasın)
         today_titles = {e["title"] for e in today}
         week_rest = [e for e in week if e["title"] not in today_titles]
         return today, week_rest
     except Exception as exc:
         logger.warning("Takvim verisi alınamadı: %s", exc)
         return [], []
+
+
+def _get_ankara_weather() -> str:
+    """Ankara hava durumunu wttr.in'den çek."""
+    try:
+        import urllib.request
+        url = "https://wttr.in/Ankara?format=%t+%C"
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            raw = resp.read().decode().strip()
+        # "+21°C Light Rain With Thunderstorm" → "21 derece, hafif yağmurlu"
+        # Türkçe'ye çevir
+        tr_map = {
+            "Light Rain With Thunderstorm": "gök gürültülü hafif yağmurlu",
+            "Heavy Rain With Thunderstorm": "gök gürültülü sağanak yağışlı",
+            "Moderate Rain With Thunderstorm": "gök gürültülü yağmurlu",
+            "Patchy rain nearby": "aralıklı yağmurlu",
+            "Patchy rain possible": "aralıklı yağmur olası",
+            "Partly cloudy": "parçalı bulutlu",
+            "Thunderstorm": "gök gürültülü fırtınalı",
+            "Light rain": "hafif yağmurlu",
+            "Moderate rain": "yağmurlu",
+            "Heavy rain": "sağanak yağışlı",
+            "Light snow": "hafif karlı",
+            "Blizzard": "tipi",
+            "Freezing": "dondurucu soğuk",
+            "Sunny": "güneşli",
+            "Clear": "açık",
+            "Cloudy": "bulutlu",
+            "Overcast": "kapalı",
+            "Mist": "sisli",
+            "Fog": "sisli",
+            "Snow": "karlı",
+            "With": "ile",
+        }
+        parts = raw.split(" ", 1)
+        temp = parts[0].replace("+", "").replace("°C", "")
+        desc = parts[1] if len(parts) > 1 else ""
+        for en, tr in tr_map.items():
+            desc = desc.replace(en, tr)
+        return f"{temp} derece, {desc.strip().lower()}"
+    except Exception as exc:
+        logger.warning("Hava durumu alınamadı: %s", exc)
+        return None
 
 
 def _get_system_stats() -> Optional[dict]:
@@ -110,37 +152,38 @@ class BriefAgent:
         self.engine.config = load_config()
 
     def run(self, speak: bool = False) -> str:
-        """Takvim destekli sabah briefi üret."""
+        """Kısa sabah briefi: günaydın + hava + etkinlikler."""
         now = datetime.now()
-        tarih = now.strftime("%-d %B %Y, %A")
-        saat = now.strftime("%H:%M")
+        _GUNLER = ["Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi","Pazar"]
+        _AYLAR  = ["","Ocak","Şubat","Mart","Nisan","Mayıs","Haziran",
+                   "Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"]
+        gun = f"{now.day} {_AYLAR[now.month]}, {_GUNLER[now.weekday()]}"
 
-        # Takvim ve sistem verisi
-        today_events, week_events = _get_calendar_data()
-        sys_stats = _get_system_stats()
+        # Takvim
+        today_events, _ = _get_calendar_data()
 
-        cal_section = _format_calendar_section(today_events, week_events)
-        sys_section = _format_system_section(sys_stats)
+        # Hava
+        hava = _get_ankara_weather()
 
-        prompt = f"""Tarih: {tarih}  |  Saat: {saat}
+        # Metin oluştur
+        lines = [f"Günaydın Meriç! Bugün {gun}."]
 
-{cal_section}
+        if hava:
+            lines.append(f"Ankara'da hava {hava}.")
 
-{sys_section}
+        if today_events:
+            lines.append("Bugünkü etkinliklerin:")
+            for ev in today_events:
+                # Tüm gün etkinliklerde (00:00 - 23:59) saat gösterme
+                start = ev.get("start", "")
+                is_allday = "0:00" in start or "00:00" in start
+                saat_str = "" if is_allday else f"{start}, "
+                lines.append(f"{saat_str}{ev['title']}.")
+        else:
+            lines.append("Bugün takviminde etkinlik yok.")
 
-Yukarıdaki verileri kullanarak Meriç için kısa ve etkili bir sabah briefi yaz.
-Takvim etkinliklerini Türkçe olarak özetle, günün nasıl geçeceğini yorumla.
-Sistem durumu normalse söyleme, anormal ise dikkat çek.
-Motivasyon cümlesiyle bitir."""
+        brief_text = " ".join(lines)
 
-        messages = [
-            {"role": "system", "content": BRIEF_SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ]
-
-        brief_text = self.engine.chat(messages)
-
-        # TTS — isterse seslendir
         if speak:
             try:
                 from ARIA.tools.tts import speak as tts_speak
