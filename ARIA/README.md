@@ -1,305 +1,362 @@
 # ARIA — Adaptive Reasoning & Intelligence Assistant
 
-> Tamamen yerel çalışan, bulut bağlantısı olmayan kişisel AI asistanı.  
-> A fully local, zero-cloud personal AI assistant.
+> **Tamamen lokal çalışan kişisel yapay zeka asistanı. Bulut yok. Telemetri yok. Hiçbir veri dışarı çıkmaz.**
+
+ARIA, macOS üzerinde Ollama ile güçlenen çok ajanlı bir kişisel asistan sistemidir. Takvim, mail, müzik, kod, hafıza ve sistem yönetimini tek bir doğal dil arayüzünden kontrol eder.
 
 ---
 
-## 🇹🇷 Türkçe
-
-### Nedir?
-
-ARIA, Ollama üzerinde çalışan yerel LLM'leri kullanan çok ajanlı bir AI asistanıdır. Hiçbir veri dışarı çıkmaz — her şey kendi makinende çalışır.
-
-### Özellikler
-
-- **Çok ajanlı mimari** — her görev için özelleşmiş ajan (araştırma, kod, hafıza, izleme…)
-- **Akıllı yönlendirme** — mesaj içeriğine göre doğru ajanı seçer (kural + LLM hibrit)
-- **Streaming cevaplar** — token token, anlık UI güncellemesi (SSE)
-- **Kalıcı hafıza** — SQLite tabanlı not ve geçmiş
-- **Web araması** — DuckDuckGo ile yerel güvenlik filtrelemesi
-- **Sesli çıktı** — macOS `say` komutuyla offline TTS
-- **REST API** — OpenAI-uyumlu `/v1/chat/completions` dahil
-- **React arayüzü** — ajan seçimi, gerçek zamanlı streaming, sistem durumu
-
-### Gereksinimler
-
-| Araç | Versiyon |
-|------|----------|
-| Python | ≥ 3.9 |
-| [Ollama](https://ollama.com) | ≥ 0.1.x |
-| Node.js (frontend) | ≥ 18 |
-| macOS (TTS için) | isteğe bağlı |
-
-> **Model:** Varsayılan `qwen2.5:7b`. `ollama pull qwen2.5:7b` ile indir.
-
-### Hızlı Başlangıç
+## Kurulum
 
 ```bash
-# 1. Repo kökünde sanal ortam oluştur
-cd ARIA/
-python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
+git clone https://github.com/kaanst1/ARIA-AI
+cd ARIA-AI/ARIA
+uv pip install -e .
+```
 
-# 2. Paketi yükle
-pip install -e .
-
-# 3. Ollama'yı başlat ve modeli indir
-ollama serve &
+**Ollama gereklidir:**
+```bash
+brew install ollama
+ollama serve
 ollama pull qwen2.5:7b
+```
 
-# 4. API sunucusunu başlat
-aria serve
-# ya da:
+**API ve Frontend başlat:**
+```bash
+# Backend (terminal 1)
 aria-api
 
-# 5. Sistem durumunu kontrol et
-aria status
+# Frontend (terminal 2)
+cd frontend && npm install && npm run dev
 ```
 
-### CLI Kullanımı
+Tarayıcıda `http://localhost:5173` adresini aç.
 
-```bash
-# Tek seferlik sohbet
-aria chat "Python'da async nedir?"
+---
 
-# Sistem durumu (Ollama, model, ayarlar)
-aria status
+## Ne Yapabilir?
 
-# Preset listele / uygula
-aria presets list
-aria presets apply config.example
+### 🧠 Çok Ajanlı Sistem
 
-# API sunucusu (host/port özelleştirme)
-aria serve --host 0.0.0.0 --port 8000
+ARIA her göreve özel ajan kullanır:
+
+| Ajan | Tetikleyici | Ne Yapar |
+|------|-------------|----------|
+| `brief` | "günaydın", "sabah briefi" | Takvim + hava + sistem özeti, TTS ile seslendirir |
+| `researcher` | "araştır", "haber", "hava" | Web arama, RSS, kaynak toplama |
+| `deep_research` | "derin araştır", "kapsamlı" | Çok kaynaklı araştırma + atıf |
+| `coder` | "kod yaz", "debug", "hata" | Kod üretme, analiz, test |
+| `analyst` | "analiz et", "veri", "tablo" | Dosya/veri analizi |
+| `writer` | "makale", "tweet", "rapor" | İçerik üretme |
+| `memory` | "hatırla", "not al", "kaydet" | Semantik hafızaya kayıt/sorgulama |
+| `planner` | "planla", "adım adım" | Çok adımlı görev planlama |
+| `terminal` | "komut", "shell", "disk" | Sistem komutları |
+| `monitor` | "izle", "takip et" | Süreç ve alert izleme |
+| `chat` | genel sohbet | Doğrudan LLM yanıtı |
+
+---
+
+### 🔧 Araçlar (35+ Tool)
+
+#### macOS Sistem Entegrasyonu
+| Araç | Komut Örneği |
+|------|--------------|
+| **Takvim** | "Bugün ne var?", "Yarın saat 15'e toplantı ekle" |
+| **Apple Mail** | "Okunmamış mailler", "X'e mail gönder" |
+| **iMessage** | "Y'ye mesaj gönder", "Okunmamış iMessage'lar" |
+| **WhatsApp** | "WhatsApp'tan Z'ye yaz" |
+| **Reminders** | "Alışveriş listesine süt ekle" |
+| **Apple Notes** | "Notlara ekle", "Notlarda ara" |
+| **Contacts** | "Ahmet'in telefonu", "Rehberde ara" |
+| **Spotlight** | "PDF dosyalarını bul", "Bu dosya nerede" |
+| **Uygulama Kontrolü** | "Chrome'u aç", "Açık uygulamalar" |
+| **Odak Modu** | "DND aç", "Odak modunu kapat" |
+| **Ekran Analizi** | "Ekrana bak" — LLaVA görsel analiz |
+
+#### Medya & Ses
+| Araç | Komut Örneği |
+|------|--------------|
+| **Spotify** | "Müzik çal", "Sıradaki şarkı", "Ses %50" |
+| **TTS (Türkçe)** | Tüm yanıtlar Emel sesiyle seslendirilir |
+| **Ses Kaydı (Whisper)** | Mikrofon butonuyla konuş, otomatik transkript |
+| **Wake Word** | "Hey ARIA" ile elleri serbest tetikleme |
+
+#### Web & Araştırma
+| Araç | Komut Örneği |
+|------|--------------|
+| **Hava Durumu** | "Hava nasıl?", "3 günlük tahmin" |
+| **Web Arama** | DuckDuckGo tabanlı gizlilik odaklı arama |
+| **RSS** | Eklenen feed'lerden haber özeti |
+| **Tarayıcı Kontrolü** | "Chrome'da aç", "Aktif sekme ne" |
+| **Podcast Özeti** | YouTube/podcast özeti |
+
+#### Verimlilik
+| Araç | Komut Örneği |
+|------|--------------|
+| **Pomodoro** | "Pomodoro başlat", 25dk çalış/5dk mola + TTS bildirim |
+| **Git Zekası** | "Son commit'leri özetle", "TODO'ları tara", "Diff analizi" |
+| **Belge Q&A** | PDF/DOCX/CSV yükle → "Bu belgede ne yazıyor?" |
+| **Pano Geçmişi** | 2 saniyede bir otomatik kayıt, 50 giriş |
+| **Shell Runner** | Güvenli komut çalıştırma |
+| **Log Analizi** | Hata loglarını yorumla |
+
+---
+
+### 🧠 Hafıza Sistemi
+
+#### Kısa Vadeli (SQLite)
+Her oturum saklanır. Context'e son 20 mesaj otomatik eklenir.
+
+#### Uzun Vadeli Semantik Hafıza (ChromaDB)
+- Her konuşma otomatik vektör hafızaya kaydedilir
+- Yeni sorularda ilgili geçmiş otomatik context'e enjekte edilir
+
+```
+"Meriç'in doğum günü 15 Mart" → Kalıcı hafızaya kaydedildi
+# İleride:
+"Doğum gününe ne kadar var?" → ARIA otomatik hatırlar
 ```
 
-### API Endpoint'leri
+---
 
-| Method | Endpoint | Açıklama |
-|--------|----------|----------|
-| `POST` | `/chat` | Ajan routing ile senkron cevap |
-| `POST` | `/chat/stream` | SSE ile token-by-token streaming |
-| `POST` | `/v1/chat/completions` | OpenAI uyumlu endpoint |
-| `GET` | `/status` | Ollama durumu, aktif model |
-| `GET` | `/models` | Yüklü Ollama modelleri |
-| `GET` | `/hardware` | Donanım bilgisi |
-| `GET` | `/presets` | Kayıtlı preset listesi |
-| `POST` | `/presets/apply` | Preset uygula |
+### 📄 Belge Q&A (RAG)
 
-```bash
-# Sağlık kontrolü
-curl http://localhost:8000/status
+PDF, TXT, DOCX, CSV indeksle ve sor:
 
-# Sohbet
-curl -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Merhaba", "agent": "chat"}'
-
-# Streaming (SSE)
-curl -N -X POST http://localhost:8000/chat/stream \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Python async nasıl çalışır?"}'
-
-# Sesli cevap (macOS)
-curl -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Bugün nasılsın?", "speak": true}'
-
-# API key ile (require_auth: true ise)
-curl -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: SENIN_ANAHTARIN" \
-  -d '{"message": "Merhaba"}'
+```
+POST /documents/index  {"file_path": "/Users/meric/sozlesme.pdf"}
+POST /documents/query  {"question": "Sözleşme bitiş tarihi ne?"}
 ```
 
-### Ajanlar
+---
 
-| Ajan | Tetikleyici kelimeler | Görev |
-|------|-----------------------|-------|
-| `chat` | genel sohbet | Varsayılan, her şey |
-| `coder` | kod, debug, hata, exception | Kod yazma ve debug |
-| `researcher` | araştır, kaynak, literatür | Web araştırması + rapor |
-| `analyst` | analiz, veri, tablo | Metin/dosya veri analizi |
-| `writer` | yaz, makale, tweet, haber | İçerik üretimi |
-| `brief` | brief, sabah, günlük özet | Günlük haber özeti |
-| `monitor` | izle, takip, alert | Periyodik konu takibi |
-| `memory` | hafıza, not, hatırla | Kalıcı not ve arama |
+### ⚙️ Workflow Motoru
 
-### Konfigürasyon
+`~/.aria/workflows/` altına YAML koy, otomatik çalışsın:
 
-Config dosyası: `~/.aria/config.json`  
-Örnek: `presets/config.example.json`
+```yaml
+name: sabah_rutini
+trigger:
+  type: schedule
+  cron: "30 7 * * 1-5"   # Hafta içi 07:30
+steps:
+  - action: weather
+    params: {}
+  - action: brief
+    params: {speak: true}
+  - action: notify
+    params: {title: "ARIA", message: "Günaydın!"}
+```
+
+**Tetikleyiciler:** `schedule` (cron) veya `keyword` (kullanıcı mesajı)  
+**Aksiyonlar:** `brief`, `weather`, `tts`, `notify`, `get_unread_emails`, `chat`, `shell`, `remember`
+
+---
+
+### 🤖 Akıllı Model Seçimi
+
+| Karmaşıklık | Örnek | Model |
+|-------------|-------|-------|
+| Basit | "günaydın", "saat kaç" | `qwen2.5:3b` (hızlı) |
+| Orta | "haberleri özetle" | `qwen2.5:7b` |
+| Karmaşık | "derin araştırma yap" | `qwen2.5:14b` (varsa) |
+
+---
+
+### 📧 Email Zekası
+
+- **Sınıflandırma**: acil / toplantı / fatura / spam / iş
+- **Toplantı tespiti**: Zoom/Teams linki, tarih/saat otomatik çıkarımı
+- **Taslak yanıt**: Ton seçimiyle otomatik üretim
+- **Smart Inbox**: `GET /email/smart-inbox`
+
+---
+
+### 📊 Analytics Dashboard
+
+Frontend'de DASHBOARD butonu ile açılır:
+- Toplam mesaj ve 7 günlük trend
+- Ajan kullanım çubuğu grafikleri
+- Saatlik aktivite dağılımı
+
+---
+
+### 🔔 Proaktif Bildirimler (Arka Plan)
+
+| Zamanlama | Eylem |
+|-----------|-------|
+| Sabah 08:00 | Sabah briefi bildirimi |
+| Her 10 dk | 15 dk içinde toplantı varsa uyarı |
+| Her 5 dk | CPU/RAM %90+ ise kaynak uyarısı |
+| Her saat | RSS yeni içerik kontrolü |
+| Her 30 dk | Bağlam analizi + akıllı öneri |
+| Her Cuma 18:00 | Haftalık kullanım raporu |
+| Her gece 21:00 | Günlük özet kaydı |
+
+---
+
+### 🎯 Bağlam Farkındalığı
+
+ARIA aktif uygulamayı ve takvimi analiz eder:
+- VS Code açıksa → Kod yardımı önerisi
+- Mail açıksa → Gelen kutusu özeti
+- 15 dk içinde toplantı → Hazırlık notu teklifi
+- Sabah 07-09 → Brief hatırlatması
+
+---
+
+## API Referansı
+
+### Temel
+```
+POST /chat              — Streaming chat
+GET  /status            — Sistem durumu
+GET  /models            — Yüklü modeller
+```
+
+### Oturumlar
+```
+GET    /sessions
+POST   /sessions
+DELETE /sessions/{id}
+GET    /sessions/{id}/export
+```
+
+### macOS Araçları
+```
+GET  /weather | /weather/forecast
+POST /notes | GET /notes | GET /notes/search
+POST /app/open | /app/quit | GET /app/running
+GET  /contacts/search
+POST /focus/enable | /focus/disable | GET /focus/status
+GET  /spotlight/search
+GET  /clipboard/history
+POST /calendar/add | GET /brief/calendar
+GET  /context/suggest | /context/frontmost-app | /context/upcoming-meetings
+```
+
+### Mesajlaşma
+```
+POST /mail/send | GET /mail/unread
+GET  /email/smart-inbox
+POST /email/classify | /email/draft
+POST /imessage/send | GET /imessage/unread
+POST /whatsapp/send
+```
+
+### Hafıza & Belge
+```
+POST /memory | GET /memory/search
+POST /documents/index | /documents/query | GET /documents
+```
+
+### Workflow
+```
+GET    /workflows
+POST   /workflows
+POST   /workflows/{name}/run
+DELETE /workflows/{name}
+```
+
+### Verimlilik
+```
+POST /pomodoro/start | /pomodoro/stop | GET /pomodoro/status
+GET  /git/log | /git/status | /git/todos
+POST /reports/weekly | GET /reports/list | /reports/daily
+GET  /health/summary | /health/steps
+```
+
+### Analitik
+```
+GET /analytics/usage
+GET /analytics/patterns
+GET /models/smart-select
+```
+
+### Medya
+```
+POST /speak | /speak/stop | GET /speak/status
+POST /spotify/play | /spotify/pause | /spotify/next
+GET  /spotify/current | POST /spotify/volume
+POST /screen/analyze | GET /screen/capture
+POST /speech/chat | /speech/record/start | /speech/record/stop
+GET  /wake-word/status
+```
+
+---
+
+## Konfigürasyon
+
+`~/.aria/config.json`:
 
 ```json
 {
   "model": "qwen2.5:7b",
-  "engine": "ollama",
-  "base_url": "http://localhost:11434",
   "language": "tr",
-  "cloud_fallback": false,
-  "allow_web_search": true,
   "enable_tts": true,
-  "tts_engine": "macos_say",
-  "require_auth": false,
-  "api_key": null,
-  "log_level": "INFO"
+  "tts_voice": "Emel",
+  "weather_city": "Ankara",
+  "enable_speech_input": false,
+  "notification_enabled": true,
+  "conversation_history_limit": 20,
+  "cloud_fallback": false,
+  "telemetry": false
 }
-```
-
-Önemli ayarlar:
-
-| Ayar | Varsayılan | Açıklama |
-|------|-----------|----------|
-| `model` | `qwen2.5:7b` | Ollama model adı |
-| `cloud_fallback` | `false` | `true` yapma — veri dışarı çıkar |
-| `allow_web_search` | `true` | DuckDuckGo araması |
-| `enable_tts` | `true` | Sesli çıktı (macOS) |
-| `require_auth` | `false` | API key zorunluluğu |
-| `warmup_on_start` | `true` | Başlangıçta model ısıtma |
-| `enable_summarization` | `true` | Uzun girdileri özetle |
-
-### Frontend
-
-```bash
-cd frontend/
-npm install
-
-# .env oluştur (isteğe bağlı — varsayılan localhost:8000)
-cp .env.example .env.local
-
-# Geliştirme
-npm run dev          # http://localhost:5173
-
-# Production build
-npm run build
-npm run preview
-```
-
-### Docker
-
-```bash
-cd ARIA/
-docker compose up --build
-```
-
-> Docker imajı sadece API'yi çalıştırır. Ollama ayrı kurulu olmalı.
-
-### Proje Yapısı
-
-```
-ARIA/
-├── src/ARIA/
-│   ├── agents/          # 7 özel ajan
-│   ├── core/            # Config, engine, registry, logging
-│   ├── engine/          # Ollama engine ve selector
-│   ├── memory/          # SQLite hafıza deposu
-│   ├── orchestrator/    # Ajan yönlendirici
-│   ├── skills/          # Yeniden kullanılabilir skill'ler
-│   ├── tools/           # Web search, dosya, TTS, matematik…
-│   ├── learning/        # Kullanım takibi ve zamanlayıcı
-│   ├── telemetry/       # Gecikme metrikleri
-│   ├── api.py           # FastAPI backend
-│   ├── cli.py           # Komut satırı arayüzü
-│   └── main.py          # İnteraktif mod giriş noktası
-├── frontend/            # React + Vite UI
-├── presets/             # Hazır config dosyaları
-├── tests/               # API testleri
-├── Dockerfile
-├── docker-compose.yml
-└── pyproject.toml
 ```
 
 ---
 
-## 🇬🇧 English
+## Mimari
 
-### What is ARIA?
-
-ARIA (Adaptive Reasoning & Intelligence Assistant) is a multi-agent AI assistant that runs entirely on local LLMs via Ollama. No data ever leaves your machine.
-
-### Features
-
-- **Multi-agent architecture** — specialised agents for each task type
-- **Smart routing** — hybrid rule + LLM-based dispatcher selects the right agent
-- **Streaming responses** — token-by-token via SSE, live UI updates
-- **Persistent memory** — SQLite-backed notes and history
-- **Web search** — DuckDuckGo with sensitive-data filtering
-- **Offline TTS** — macOS `say` command
-- **REST API** — including OpenAI-compatible `/v1/chat/completions`
-- **React UI** — agent switching, real-time streaming, live system status
-
-### Requirements
-
-| Tool | Version |
-|------|---------|
-| Python | ≥ 3.9 |
-| [Ollama](https://ollama.com) | ≥ 0.1.x |
-| Node.js (frontend only) | ≥ 18 |
-
-> **Default model:** `qwen2.5:7b` — pull with `ollama pull qwen2.5:7b`
-
-### Quickstart
-
-```bash
-cd ARIA/
-python -m venv .venv
-source .venv/bin/activate
-
-pip install -e .
-
-ollama serve &
-ollama pull qwen2.5:7b
-
-aria serve          # start API on :8000
-aria status         # verify everything is running
+```
+ARIA/
+├── src/ARIA/
+│   ├── api.py                    # FastAPI (70+ endpoint)
+│   ├── agents/                   # 11 özel ajan
+│   ├── orchestrator/router.py    # Kural + LLM yönlendirici
+│   ├── core/
+│   │   ├── engine.py             # Ollama wrapper
+│   │   ├── config.py             # Konfigürasyon
+│   │   └── smart_router.py       # Karmaşıklık bazlı model seçimi
+│   ├── memory/
+│   │   ├── conversation_store.py # SQLite oturum hafızası
+│   │   ├── vector_memory.py      # ChromaDB semantik hafıza
+│   │   └── semantic_context.py   # Otomatik bağlam enjeksiyonu
+│   ├── automation/
+│   │   └── workflow_engine.py    # YAML workflow motoru
+│   ├── scheduler/
+│   │   └── proactive.py          # Arka plan zamanlayıcı (8 görev)
+│   ├── learning/
+│   │   └── tracker.py            # Kullanım takibi + pattern analizi
+│   └── tools/                    # 35+ araç modülü
+├── frontend/                     # React HUD arayüzü
+└── presets/                      # Hazır yapılandırma şablonları
 ```
 
-### CLI
+---
 
-```bash
-aria chat "What is async/await in Python?"
-aria status
-aria presets list
-aria presets apply config.example
-aria serve --host 0.0.0.0 --port 8000
-```
+## Gizlilik
 
-### Agents
+- Tüm LLM çağrıları `localhost:11434` (Ollama) üzerinden
+- Web arama: DuckDuckGo — kullanıcı verisi içermeyen sorgular
+- Telemetri: **Kapalı**
+- Bulut fallback: **Kapalı**
+- Tüm veriler `~/.aria/` altında yerel olarak saklanır
 
-| Agent | Trigger words | Purpose |
-|-------|--------------|---------|
-| `chat` | general | Default fallback |
-| `coder` | code, debug, error, exception | Code & debugging |
-| `researcher` | research, source, literature | Web research + report |
-| `analyst` | analyse, data, table | Text/file data analysis |
-| `writer` | write, article, tweet, news | Content generation |
-| `brief` | brief, morning, daily summary | Daily news digest |
-| `monitor` | monitor, track, alert | Periodic topic monitoring |
-| `memory` | memory, note, remember | Persistent notes & search |
+---
 
-### Configuration
+## Gereksinimler
 
-Config is stored at `~/.aria/config.json`. See `presets/config.example.json` for all options.
+- macOS 13+ (Ventura veya üzeri)
+- Python 3.9+
+- Ollama (`qwen2.5:7b` minimum)
+- Node.js 18+ (frontend)
+- `uv` paket yöneticisi (önerilir)
 
-### Docker
+**Opsiyonel:**
+- `rumps` — Menu bar ikonu
+- `pymupdf` / `python-docx` — PDF/Word işleme
 
-```bash
-docker compose up --build
-```
+---
 
-The image runs the API only. Ollama must be installed and accessible separately.
-
-### Development
-
-```bash
-pip install -e ".[dev]"
-pytest ARIA/tests/
-```
-
-### Security Notes
-
-- `cloud_fallback` is `false` by default and should remain so
-- `base_url` is restricted to `localhost` / `127.0.0.1`
-- Web search queries are filtered for sensitive data (emails, phone numbers, file paths)
-- File access is restricted to `~/.aria` by default
+*ARIA — Kişisel AI, Kişisel Cihazında.*

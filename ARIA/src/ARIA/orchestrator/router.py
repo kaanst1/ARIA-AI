@@ -214,6 +214,30 @@ class Orchestrator:
         if any(k in text for k in spotlight_triggers):
             return {"agent": "chat", "reason": "spotlight arama komutu"}
 
+        # ── Pomodoro tespiti ──────────────────────────────────────────────────
+        if any(k in text for k in ["pomodoro", "odaklanma modu", "çalışma zamanlayıcı", "timer başlat"]):
+            return {"agent": "chat", "reason": "pomodoro komutu"}
+
+        # ── iMessage tespiti ──────────────────────────────────────────────────
+        if any(k in text for k in ["imessage", "i message", "sms gönder", "kısa mesaj"]):
+            return {"agent": "chat", "reason": "imessage komutu"}
+
+        # ── Git/kod tespiti ───────────────────────────────────────────────────
+        if any(k in text for k in ["git log", "commit özeti", "todo tara", "git durumu", "diff özetle"]):
+            return {"agent": "chat", "reason": "git intelligence komutu"}
+
+        # ── Sağlık verisi tespiti ─────────────────────────────────────────────
+        if any(k in text for k in ["adım sayısı", "uyku kalitesi", "sağlık özeti", "health", "kaç adım"]):
+            return {"agent": "chat", "reason": "health komutu"}
+
+        # ── Haftalık/günlük rapor tespiti ─────────────────────────────────────
+        if any(k in text for k in ["haftalık rapor", "günlük rapor", "rapor oluştur", "haftanın özeti"]):
+            return {"agent": "chat", "reason": "rapor komutu"}
+
+        # ── Bağlam önerisi tespiti ────────────────────────────────────────────
+        if any(k in text for k in ["ne önerirsin", "şu an ne yapayım", "bağlam önerisi"]):
+            return {"agent": "chat", "reason": "bağlam önerisi"}
+
         for agent, keys in keyword_rules:
             if any(k in text for k in keys):
                 return {"agent": agent, "reason": "keyword eşleşmesi"}

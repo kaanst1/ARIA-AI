@@ -59,6 +59,24 @@ async def lifespan(_app: FastAPI):
     except Exception as exc:
         logger.warning("Workflow scheduler başlatılamadı: %s", exc)
 
+    # Wake word dinlemeyi başlat
+    try:
+        config = load_config()
+        if getattr(config, "enable_speech_input", False):
+            from ARIA.tools.wake_word import start_wake_word
+            from ARIA.orchestrator.router import Orchestrator
+            _orch = Orchestrator()
+            def _on_wake(text: str):
+                logger.info("Wake word tetiklendi: %s", text)
+                try:
+                    _orch.dispatch("hey aria ne önerirsin")
+                except Exception:
+                    pass
+            start_wake_word(_on_wake)
+            logger.info("Wake word dinleme başlatıldı")
+    except Exception as exc:
+        logger.warning("Wake word başlatılamadı: %s", exc)
+
     yield
 
 
@@ -1626,6 +1644,208 @@ async def smart_select_endpoint(query: str, x_api_key: str | None = Header(defau
         complexity = classify_complexity(query)
         selected = select_model(query, models, engine.config.model)
         return {"query": query, "complexity": complexity, "selected_model": selected, "available": models}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Pomodoro ─────────────────────────────────────────────────────────────────
+
+class PomodoroStartRequest(BaseModel):
+    work_minutes: int = 25
+    break_minutes: int = 5
+    long_break_minutes: int = 15
+    cycles: int = 4
+
+
+@app.post("/pomodoro/start")
+async def pomodoro_start_endpoint(req: PomodoroStartRequest, x_api_key: str | None = Header(default=None)):
+    """Pomodoro başlat."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.pomodoro import pomodoro_start
+        return pomodoro_start(req.work_minutes, req.break_minutes, req.long_break_minutes, req.cycles)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/pomodoro/stop")
+async def pomodoro_stop_endpoint(x_api_key: str | None = Header(default=None)):
+    """Pomodoro durdur."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.pomodoro import pomodoro_stop
+        return pomodoro_stop()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/pomodoro/status")
+async def pomodoro_status_endpoint(x_api_key: str | None = Header(default=None)):
+    """Pomodoro durumu."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.pomodoro import pomodoro_status
+        return pomodoro_status()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── iMessage ─────────────────────────────────────────────────────────────────
+
+class IMessageSendRequest(BaseModel):
+    recipient: str
+    message: str
+
+
+@app.post("/imessage/send")
+async def imessage_send_endpoint(req: IMessageSendRequest, x_api_key: str | None = Header(default=None)):
+    """iMessage gönder."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.imessage import imessage_send
+        return imessage_send(req.recipient, req.message)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/imessage/unread")
+async def imessage_unread_endpoint(limit: int = 5, x_api_key: str | None = Header(default=None)):
+    """Okunmamış iMessage'ları getir."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.imessage import imessage_get_unread
+        return imessage_get_unread(limit)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Git Zekası ────────────────────────────────────────────────────────────────
+
+@app.get("/git/log")
+async def git_log_endpoint(path: str | None = None, count: int = 10, x_api_key: str | None = Header(default=None)):
+    """Git commit geçmişini özetle."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.git_intelligence import git_log_summary
+        return git_log_summary(path, count)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/git/status")
+async def git_status_endpoint(path: str | None = None, x_api_key: str | None = Header(default=None)):
+    """Git durumu."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.git_intelligence import git_status_summary
+        return git_status_summary(path)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/git/todos")
+async def git_todos_endpoint(path: str | None = None, x_api_key: str | None = Header(default=None)):
+    """TODO/FIXME tara."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.git_intelligence import git_todo_scan
+        return git_todo_scan(path)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Rapor ─────────────────────────────────────────────────────────────────────
+
+@app.post("/reports/weekly")
+async def weekly_report_endpoint(x_api_key: str | None = Header(default=None)):
+    """Haftalık rapor üret."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.weekly_report import generate_weekly_report
+        return generate_weekly_report(save=True)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/reports/list")
+async def reports_list_endpoint(limit: int = 10, x_api_key: str | None = Header(default=None)):
+    """Kayıtlı raporları listele."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.weekly_report import list_reports
+        return list_reports(limit)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Apple Health ──────────────────────────────────────────────────────────────
+
+@app.get("/health/summary")
+async def health_summary_endpoint(x_api_key: str | None = Header(default=None)):
+    """Sağlık özeti."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.health import health_summary
+        return health_summary()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/health/steps")
+async def health_steps_endpoint(days: int = 7, x_api_key: str | None = Header(default=None)):
+    """Adım sayısı verisi."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.health import health_get_steps
+        return health_get_steps(days)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Bağlam Farkındalığı ───────────────────────────────────────────────────────
+
+@app.get("/context/suggest")
+async def context_suggest_endpoint(x_api_key: str | None = Header(default=None)):
+    """Mevcut bağlama göre öneri üret."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.context_awareness import context_suggest
+        return context_suggest()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/context/frontmost-app")
+async def context_app_endpoint(x_api_key: str | None = Header(default=None)):
+    """Ön plandaki uygulamayı döndür."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.context_awareness import context_get_frontmost_app
+        return context_get_frontmost_app()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/context/upcoming-meetings")
+async def context_meetings_endpoint(minutes: int = 30, x_api_key: str | None = Header(default=None)):
+    """Yaklaşan toplantıları döndür."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.context_awareness import context_upcoming_meetings
+        return context_upcoming_meetings(minutes)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Wake Word Kontrolü ────────────────────────────────────────────────────────
+
+@app.get("/wake-word/status")
+async def wake_word_status_endpoint(x_api_key: str | None = Header(default=None)):
+    """Wake word dinleme durumu."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.wake_word import is_listening
+        return {"listening": is_listening()}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

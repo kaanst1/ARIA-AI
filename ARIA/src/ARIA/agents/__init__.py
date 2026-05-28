@@ -22,6 +22,8 @@ try:
         mail_control, weather, notes, app_control,
         contacts, focus_mode, browser_control, spotlight_search,
         clipboard_history, document_qa, email_intelligence,
+        wake_word, context_awareness, pomodoro, imessage,
+        git_intelligence, weekly_report, health,
     )
 except Exception:
     pass

@@ -153,6 +153,10 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [view, setView] = useState("chat"); // "chat" | "dashboard"
   const [analytics, setAnalytics] = useState(null);
+  const [pinnedMessages, setPinnedMessages] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("aria-pins") || "[]"); } catch { return []; }
+  });
+  const [artifacts, setArtifacts] = useState([]); // {id, type, content, ts}
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -450,6 +454,33 @@ export default function App() {
     }
   };
 
+  // ── Pin / Artifact yönetimi ───────────────────────────────────────────────────
+  const togglePin = (msg) => {
+    setPinnedMessages((prev) => {
+      const exists = prev.some((p) => p.id === msg.id);
+      const next = exists ? prev.filter((p) => p.id !== msg.id) : [...prev, msg];
+      localStorage.setItem("aria-pins", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const isPinned = (msgId) => pinnedMessages.some((p) => p.id === msgId);
+
+  const extractArtifacts = (content, msgId) => {
+    const codeBlocks = [...content.matchAll(/```(\w+)?\n([\s\S]*?)```/g)];
+    const links = [...content.matchAll(/https?:\/\/[^\s)]+/g)];
+    const newArts = [];
+    codeBlocks.forEach((m, i) => {
+      newArts.push({ id: `${msgId}-code-${i}`, type: "code", lang: m[1] || "text", content: m[2].trim(), ts: Date.now() });
+    });
+    links.forEach((m, i) => {
+      newArts.push({ id: `${msgId}-link-${i}`, type: "link", content: m[0], ts: Date.now() });
+    });
+    if (newArts.length > 0) {
+      setArtifacts((prev) => [...prev.slice(-19), ...newArts]);
+    }
+  };
+
   // ── Mesaj gönder ─────────────────────────────────────────────────────────────
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
@@ -580,11 +611,14 @@ export default function App() {
         ];
       });
     } finally {
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages((prev) => {
+        const updated = prev.map((m) =>
           m.id === ariaId && m.streaming ? { ...m, streaming: false } : m
-        )
-      );
+        );
+        const finalMsg = updated.find((m) => m.id === ariaId);
+        if (finalMsg?.content) extractArtifacts(finalMsg.content, ariaId);
+        return updated;
+      });
       setLoading(false);
     }
   };
@@ -837,6 +871,15 @@ export default function App() {
                       <span className="feed-agent-badge">{agentLabel}</span>
                     )}
                     <span className="feed-divider">────────────────────</span>
+                    {!isUser && (
+                      <button
+                        className={`pin-btn${isPinned(msg.id) ? " pin-btn--active" : ""}`}
+                        onClick={() => togglePin(msg)}
+                        title={isPinned(msg.id) ? "Pinli — kaldır" : "Pinle"}
+                      >
+                        {isPinned(msg.id) ? "★" : "☆"}
+                      </button>
+                    )}
                   </div>
                   <div className="feed-content">
                     {msg.streaming && !msg.content ? (
@@ -916,6 +959,41 @@ export default function App() {
               </button>
             </div>
           </div>
+
+          {/* PINNED */}
+          {pinnedMessages.length > 0 && (
+            <div className="panel-section panel-section--grow">
+              <div className="panel-header">PINNED ({pinnedMessages.length})</div>
+              <div className="pinned-list">
+                {pinnedMessages.slice(-5).map((p) => (
+                  <div key={p.id} className="pinned-item" title={p.content}>
+                    <span className="pinned-text">{p.content.slice(0, 60)}…</span>
+                    <button className="pinned-remove" onClick={() => togglePin(p)}>×</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ARTIFACTS */}
+          {artifacts.length > 0 && (
+            <div className="panel-section panel-section--grow">
+              <div className="panel-header">ARTIFACTS ({artifacts.length})</div>
+              <div className="artifact-list">
+                {artifacts.slice(-8).reverse().map((a) => (
+                  <div key={a.id} className="artifact-item"
+                    onClick={() => a.type === "link" && window.open(a.content, "_blank")}
+                    title={a.content}
+                  >
+                    <span className="artifact-icon">{a.type === "code" ? "❮❯" : "🔗"}</span>
+                    <span className="artifact-label">
+                      {a.type === "code" ? (a.lang || "code") : a.content.slice(0, 30)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
         </aside>
       </div>

@@ -106,6 +106,47 @@ def _daily_summary() -> None:
         logger.error("Günlük özet hatası: %s", exc)
 
 
+def _weekly_report_job() -> None:
+    """Haftalık raporu üret ve bildir."""
+    try:
+        from ARIA.tools.weekly_report import generate_weekly_report
+        result = generate_weekly_report(save=True)
+        _send_macos_notification("ARIA Haftalık Rapor", f"{result.get('total_messages', 0)} mesaj bu hafta. Rapor kaydedildi.")
+        logger.info("Haftalık rapor üretildi")
+    except Exception as exc:
+        logger.error("Haftalık rapor hatası: %s", exc)
+
+
+def _check_upcoming_meetings() -> None:
+    """15 dakika içindeki toplantıları kontrol et ve uyar."""
+    try:
+        from ARIA.tools.context_awareness import context_upcoming_meetings
+        result = context_upcoming_meetings(15)
+        next_mtg = result.get("next")
+        if next_mtg:
+            mins = next_mtg.get("minutes_until", 0)
+            title = next_mtg.get("title", "Toplantı")
+            if mins <= 15:
+                _send_macos_notification(
+                    "ARIA — Yaklaşan Toplantı",
+                    f"'{title}' {mins} dakika sonra başlıyor!",
+                )
+    except Exception as exc:
+        logger.debug("Toplantı kontrolü: %s", exc)
+
+
+def _context_suggestion_job() -> None:
+    """Bağlam analizi yap, uygunsa öneri bildir."""
+    try:
+        from ARIA.tools.context_awareness import context_suggest
+        result = context_suggest()
+        suggestion = result.get("suggestion")
+        if suggestion and result.get("reason") not in ("no_context",):
+            _send_macos_notification("ARIA Öneri", suggestion)
+    except Exception as exc:
+        logger.debug("Bağlam önerisi hatası: %s", exc)
+
+
 def _check_rss_feeds() -> None:
     """RSS feed'lerini kontrol et, yeni içerik varsa bildir."""
     try:
@@ -145,6 +186,15 @@ class ProactiveScheduler:
 
         # Her saat — RSS feed kontrolü
         schedule.every(1).hours.do(_check_rss_feeds)
+
+        # Her Cuma 18:00 — haftalık rapor
+        schedule.every().friday.at("18:00").do(_weekly_report_job)
+
+        # Her 10 dakika — yaklaşan toplantı kontrolü
+        schedule.every(10).minutes.do(_check_upcoming_meetings)
+
+        # Her 30 dakika — bağlam önerisi
+        schedule.every(30).minutes.do(_context_suggestion_job)
 
         logger.info("Proaktif zamanlayıcı görevleri kuruldu")
 

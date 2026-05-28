@@ -1060,3 +1060,80 @@
   color: var(--muted);
   white-space: nowrap;
 }
+
+/* ── Pin Button ─────────────────────────────────────────────────────────── */
+
+.pin-btn {
+  background: none;
+  border: none;
+  color: rgba(0, 212, 255, 0.3);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color 0.15s;
+  margin-left: auto;
+}
+.pin-btn:hover { color: var(--cyan); }
+.pin-btn--active { color: var(--cyan); }
+
+/* ── Pinned List ────────────────────────────────────────────────────────── */
+
+.pinned-list { display: flex; flex-direction: column; gap: 4px; }
+
+.pinned-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 212, 255, 0.04);
+  border: 1px solid rgba(0, 212, 255, 0.12);
+  border-radius: 3px;
+  padding: 4px 6px;
+  font-size: 9px;
+}
+
+.pinned-text {
+  flex: 1;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pinned-remove {
+  background: none;
+  border: none;
+  color: rgba(0, 212, 255, 0.4);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+  flex-shrink: 0;
+}
+.pinned-remove:hover { color: var(--cyan); }
+
+/* ── Artifacts ──────────────────────────────────────────────────────────── */
+
+.artifact-list { display: flex; flex-direction: column; gap: 3px; }
+
+.artifact-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  background: rgba(0, 212, 255, 0.03);
+  border: 1px solid rgba(0, 212, 255, 0.1);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.artifact-item:hover { background: rgba(0, 212, 255, 0.08); }
+
+.artifact-icon { font-size: 10px; color: var(--cyan); flex-shrink: 0; }
+
+.artifact-label {
+  font-size: 9px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
