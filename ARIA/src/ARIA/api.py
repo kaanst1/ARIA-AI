@@ -43,6 +43,13 @@ async def lifespan(_app: FastAPI):
     except Exception as exc:
         logger.warning("ProactiveScheduler başlatılamadı: %s", exc)
 
+    # Clipboard geçmişi izleme başlat
+    try:
+        from ARIA.tools.clipboard_history import start_monitor as _start_clipboard
+        _start_clipboard()
+    except Exception as exc:
+        logger.warning("Clipboard monitor başlatılamadı: %s", exc)
+
     yield
 
 
@@ -1080,6 +1087,279 @@ async def speech_chat_endpoint(x_api_key: str | None = Header(default=None)):
 
     except HTTPException:
         raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Hava Durumu ───────────────────────────────────────────────────────────────
+
+@app.get("/weather")
+async def weather_current_endpoint(city: str | None = None, x_api_key: str | None = Header(default=None)):
+    """Anlık hava durumu."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.weather import weather_current
+        return weather_current(city)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/weather/forecast")
+async def weather_forecast_endpoint(city: str | None = None, days: int = 3, x_api_key: str | None = Header(default=None)):
+    """Hava tahmini (1-3 gün)."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.weather import weather_forecast
+        return weather_forecast(city, days=min(days, 3))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Apple Notes ───────────────────────────────────────────────────────────────
+
+class NoteCreate(BaseModel):
+    title: str
+    body: str
+    folder: str = "Notes"
+
+
+@app.post("/notes")
+async def notes_create_endpoint(note: NoteCreate, x_api_key: str | None = Header(default=None)):
+    """Yeni Apple Not oluştur."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.notes import notes_create
+        return notes_create(note.title, note.body, note.folder)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/notes")
+async def notes_list_endpoint(folder: str = "Notes", limit: int = 10, x_api_key: str | None = Header(default=None)):
+    """Apple Notes listesi."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.notes import notes_list
+        return notes_list(folder, limit)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/notes/search")
+async def notes_search_endpoint(q: str, x_api_key: str | None = Header(default=None)):
+    """Apple Notes'ta arama yap."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.notes import notes_search
+        return notes_search(q)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Uygulama Kontrolü ─────────────────────────────────────────────────────────
+
+class AppRequest(BaseModel):
+    app_name: str
+
+
+@app.post("/app/open")
+async def app_open_endpoint(req: AppRequest, x_api_key: str | None = Header(default=None)):
+    """macOS uygulaması aç."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.app_control import app_open
+        return app_open(req.app_name)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/app/quit")
+async def app_quit_endpoint(req: AppRequest, x_api_key: str | None = Header(default=None)):
+    """macOS uygulaması kapat."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.app_control import app_quit
+        return app_quit(req.app_name)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/app/running")
+async def app_running_endpoint(x_api_key: str | None = Header(default=None)):
+    """Çalışan uygulamaları listele."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.app_control import app_list_running
+        return app_list_running()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Kişiler ───────────────────────────────────────────────────────────────────
+
+@app.get("/contacts/search")
+async def contacts_search_endpoint(q: str, x_api_key: str | None = Header(default=None)):
+    """Rehberde kişi ara."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.contacts import contacts_search
+        return contacts_search(q)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Odak Modu ─────────────────────────────────────────────────────────────────
+
+class FocusRequest(BaseModel):
+    mode: str = "Do Not Disturb"
+
+
+@app.post("/focus/enable")
+async def focus_enable_endpoint(req: FocusRequest, x_api_key: str | None = Header(default=None)):
+    """Odak modunu etkinleştir."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.focus_mode import focus_enable
+        return focus_enable(req.mode)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/focus/disable")
+async def focus_disable_endpoint(x_api_key: str | None = Header(default=None)):
+    """Odak modunu devre dışı bırak."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.focus_mode import focus_disable
+        return focus_disable()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/focus/status")
+async def focus_status_endpoint(x_api_key: str | None = Header(default=None)):
+    """Odak modu durumunu öğren."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.focus_mode import focus_status
+        return focus_status()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Tarayıcı Kontrolü ────────────────────────────────────────────────────────
+
+class BrowserOpenRequest(BaseModel):
+    url: str
+    browser: str | None = None
+
+
+class BrowserSearchRequest(BaseModel):
+    query: str
+    engine: str = "google"
+
+
+@app.post("/browser/open")
+async def browser_open_endpoint(req: BrowserOpenRequest, x_api_key: str | None = Header(default=None)):
+    """Tarayıcıda URL aç."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.browser_control import browser_open_url
+        return browser_open_url(req.url, req.browser)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/browser/current")
+async def browser_current_tab_endpoint(browser: str | None = None, x_api_key: str | None = Header(default=None)):
+    """Aktif tarayıcı sekmesini getir."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.browser_control import browser_get_current_tab
+        return browser_get_current_tab(browser)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/browser/search")
+async def browser_search_endpoint(req: BrowserSearchRequest, x_api_key: str | None = Header(default=None)):
+    """Tarayıcıda arama yap."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.browser_control import browser_search
+        return browser_search(req.query, req.engine)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Spotlight Arama ───────────────────────────────────────────────────────────
+
+@app.get("/spotlight/search")
+async def spotlight_search_endpoint(
+    q: str,
+    kind: str | None = None,
+    limit: int = 10,
+    x_api_key: str | None = Header(default=None),
+):
+    """Spotlight ile dosya ara."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.spotlight_search import spotlight_search
+        return spotlight_search(q, kind=kind, limit=limit)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Clipboard Geçmişi ────────────────────────────────────────────────────────
+
+@app.get("/clipboard/history")
+async def clipboard_history_endpoint(limit: int = 20, x_api_key: str | None = Header(default=None)):
+    """Clipboard geçmişini getir."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.clipboard_history import clipboard_history_get
+        return clipboard_history_get(limit)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.delete("/clipboard/history")
+async def clipboard_history_clear_endpoint(x_api_key: str | None = Header(default=None)):
+    """Clipboard geçmişini temizle."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.clipboard_history import clipboard_history_clear
+        return clipboard_history_clear()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/clipboard/history/search")
+async def clipboard_history_search_endpoint(q: str, x_api_key: str | None = Header(default=None)):
+    """Clipboard geçmişinde arama yap."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.clipboard_history import clipboard_history_search
+        return clipboard_history_search(q)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Sohbet Geçmişi Export ─────────────────────────────────────────────────────
+
+@app.get("/sessions/{session_id}/export")
+async def session_export(session_id: int, x_api_key: str | None = Header(default=None)):
+    """Sohbet geçmişini JSON olarak dışa aktar."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.memory.conversation_store import ConversationStore
+        store = ConversationStore()
+        messages = store.get_context_messages(session_id, n=1000)
+        return {
+            "session_id": session_id,
+            "message_count": len(messages),
+            "messages": messages,
+        }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

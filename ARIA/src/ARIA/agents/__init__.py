@@ -19,7 +19,9 @@ try:
         log_analyzer, github_monitor, translator,
         podcast_summarizer, system_monitor, calendar_tools,
         alarm, reminders, spotify_control, screen_capture,
-        mail_control,
+        mail_control, weather, notes, app_control,
+        contacts, focus_mode, browser_control, spotlight_search,
+        clipboard_history,
     )
 except Exception:
     pass

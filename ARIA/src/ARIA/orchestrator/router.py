@@ -155,6 +155,65 @@ class Orchestrator:
         if any(k in text for k in screen_triggers):
             return {"agent": "chat", "reason": "ekran analizi komutu"}
 
+        # ── Hava durumu tespiti ───────────────────────────────────────────────
+        weather_triggers = [
+            "hava durumu", "hava nasıl", "bugün hava", "yarın hava",
+            "yağmur", "sıcaklık", "nem", "rüzgar", "tahmin",
+        ]
+        if any(k in text for k in weather_triggers):
+            return {"agent": "chat", "reason": "hava durumu komutu"}
+
+        # ── Apple Notes tespiti ───────────────────────────────────────────────
+        notes_triggers = [
+            "notes a ekle", "notlara ekle", "not oluştur", "nota ekle",
+            "notlarım", "notes'ta ara", "notlarda ara",
+        ]
+        if any(k in text for k in notes_triggers):
+            return {"agent": "chat", "reason": "apple notes komutu"}
+
+        # ── Uygulama kontrol tespiti ──────────────────────────────────────────
+        app_triggers = [
+            "uygulamayı aç", "uygulamayı kapat", "aç ", "kapat ",
+            "çalışan uygulamalar", "hangi uygulamalar açık",
+        ]
+        if any(k in text for k in app_triggers) and any(
+            k in text for k in ["chrome", "safari", "spotify", "terminal", "finder",
+                                  "slack", "discord", "notion", "vscode", "xcode", "arc"]
+        ):
+            return {"agent": "chat", "reason": "uygulama kontrol komutu"}
+
+        # ── Kişiler tespiti ───────────────────────────────────────────────────
+        contacts_triggers = [
+            "kişiyi bul", "rehberde ara", "telefon numarası", "e-posta adresi",
+            "kişi ara", "kontakt",
+        ]
+        if any(k in text for k in contacts_triggers):
+            return {"agent": "chat", "reason": "rehber komutu"}
+
+        # ── Odak modu tespiti ─────────────────────────────────────────────────
+        focus_triggers = [
+            "odak modu", "rahatsız etme", "dnd aç", "dnd kapat",
+            "bildirimler kapat", "focus modu", "do not disturb",
+        ]
+        if any(k in text for k in focus_triggers):
+            return {"agent": "chat", "reason": "odak modu komutu"}
+
+        # ── Tarayıcı kontrol tespiti ──────────────────────────────────────────
+        browser_triggers = [
+            "tarayıcıda aç", "chrome'da aç", "safari'de aç", "sitesine git",
+            "web'de ara", "sekme aç", "tarayıcıda ara",
+        ]
+        if any(k in text for k in browser_triggers):
+            return {"agent": "chat", "reason": "tarayıcı komutu"}
+
+        # ── Dosya/Spotlight arama tespiti ─────────────────────────────────────
+        spotlight_triggers = [
+            "dosya bul", "dosyayı bul", "spotlightta ara", "bilgisayarda ara",
+            "dosya ara", "nerede bu dosya",
+        ]
+        if any(k in text for k in spotlight_triggers):
+            return {"agent": "chat", "reason": "spotlight arama komutu"}
+
         for agent, keys in keyword_rules:
             if any(k in text for k in keys):
                 return {"agent": agent, "reason": "keyword eşleşmesi"}
