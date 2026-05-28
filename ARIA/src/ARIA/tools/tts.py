@@ -78,11 +78,26 @@ _MD_CLEAN = [
 ]
 
 
+_PHONETIC = [
+    # Kısaltmalar / özel isimler
+    (re.compile(r"\bARIA\b"),   "Arya"),
+    (re.compile(r"\baria\b"),   "Arya"),
+    (re.compile(r"\bArıa\b"),   "Arya"),
+]
+
+
+def _apply_phonetics(text: str) -> str:
+    for pat, repl in _PHONETIC:
+        text = pat.sub(repl, text)
+    return text
+
+
 def _clean_for_speech(text: str) -> str:
     cleaned = text
     for pat in _MD_CLEAN:
         cleaned = pat.sub(" ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    cleaned = _apply_phonetics(cleaned)
     # Max 900 karakter — ilk 4 cümle
     if len(cleaned) > 900:
         sentences = re.split(r"(?<=[.!?])\s+", cleaned)
