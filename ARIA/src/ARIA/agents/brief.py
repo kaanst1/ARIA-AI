@@ -42,10 +42,14 @@ def _get_calendar_data() -> tuple[list[dict], list[dict]]:
 
 
 def _get_ankara_weather() -> str:
-    """Ankara hava durumunu wttr.in'den çek."""
+    """Hava durumunu wttr.in'den çek (şehir config'den alınır)."""
     try:
         import urllib.request
-        url = "https://wttr.in/Ankara?format=%t+%C"
+        import urllib.parse
+        config = load_config()
+        city = getattr(config, "weather_city", "Ankara")
+        encoded_city = urllib.parse.quote(city)
+        url = f"https://wttr.in/{encoded_city}?format=%t+%C"
         with urllib.request.urlopen(url, timeout=5) as resp:
             raw = resp.read().decode().strip()
         # "+21°C Light Rain With Thunderstorm" → "21 derece, hafif yağmurlu"
@@ -164,12 +168,14 @@ class BriefAgent:
 
         # Hava
         hava = _get_ankara_weather()
+        config = load_config()
+        weather_city = getattr(config, "weather_city", "Ankara")
 
         # Metin oluştur
         lines = [f"Günaydın Meriç! Bugün {gun}."]
 
         if hava:
-            lines.append(f"Ankara'da hava {hava}.")
+            lines.append(f"{weather_city}'da hava {hava}.")
 
         if today_events:
             lines.append("Bugünkü etkinliklerin:")

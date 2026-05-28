@@ -771,6 +771,319 @@ async def alarm_cancel(job_id: int, x_api_key: str | None = Header(default=None)
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+# ── Config endpoint'leri ─────────────────────────────────────────────────────
+
+class WeatherCityRequest(BaseModel):
+    city: str
+
+
+@app.post("/config/weather-city")
+async def set_weather_city(req: WeatherCityRequest, x_api_key: str | None = Header(default=None)):
+    """Hava durumu şehrini güncelle."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.core.config import load_config, save_config
+        config = load_config()
+        config.weather_city = req.city.strip()
+        save_config(config)
+        return {"success": True, "weather_city": config.weather_city}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/config/weather-city")
+async def get_weather_city(x_api_key: str | None = Header(default=None)):
+    """Mevcut hava durumu şehrini döndür."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.core.config import load_config
+        config = load_config()
+        return {"weather_city": getattr(config, "weather_city", "Ankara")}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Reminders endpoint'leri ──────────────────────────────────────────────────
+
+class ReminderAddRequest(BaseModel):
+    title: str
+    due_date: Optional[str] = None   # "YYYY-MM-DD"
+    due_time: Optional[str] = None   # "HH:MM"
+    notes: str = ""
+    list_name: str = "Reminders"
+
+
+@app.post("/reminders")
+async def reminders_add(req: ReminderAddRequest, x_api_key: str | None = Header(default=None)):
+    """Apple Reminders'a yeni hatırlatıcı ekle."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.reminders import add_reminder
+        result = add_reminder(
+            title=req.title,
+            due_date=req.due_date,
+            due_time=req.due_time,
+            notes=req.notes,
+            list_name=req.list_name,
+        )
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("error", "Hatırlatıcı eklenemedi"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/reminders")
+async def reminders_list(
+    list_name: Optional[str] = None,
+    completed: bool = False,
+    x_api_key: str | None = Header(default=None),
+):
+    """Apple Reminders'dan hatırlatıcıları listele."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.reminders import get_reminders
+        items = get_reminders(list_name=list_name, completed=completed)
+        return {"reminders": items, "count": len(items)}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Spotify endpoint'leri ────────────────────────────────────────────────────
+
+class SpotifyPlayRequest(BaseModel):
+    query: Optional[str] = None
+
+
+class SpotifyVolumeRequest(BaseModel):
+    level: int  # 0-100
+
+
+@app.post("/spotify/play")
+async def spotify_play_endpoint(req: SpotifyPlayRequest, x_api_key: str | None = Header(default=None)):
+    """Spotify'da çal (query varsa ara ve çal)."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.spotify_control import spotify_play
+        return spotify_play(query=req.query)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/spotify/pause")
+async def spotify_pause_endpoint(x_api_key: str | None = Header(default=None)):
+    """Spotify'ı duraklat."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.spotify_control import spotify_pause
+        return spotify_pause()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/spotify/next")
+async def spotify_next_endpoint(x_api_key: str | None = Header(default=None)):
+    """Spotify'da sonraki şarkı."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.spotify_control import spotify_next
+        return spotify_next()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/spotify/previous")
+async def spotify_previous_endpoint(x_api_key: str | None = Header(default=None)):
+    """Spotify'da önceki şarkı."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.spotify_control import spotify_previous
+        return spotify_previous()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/spotify/current")
+async def spotify_current_endpoint(x_api_key: str | None = Header(default=None)):
+    """Spotify'da şu an çalan şarkının bilgisi."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.spotify_control import spotify_current
+        return spotify_current()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/spotify/volume")
+async def spotify_volume_endpoint(req: SpotifyVolumeRequest, x_api_key: str | None = Header(default=None)):
+    """Spotify ses seviyesini ayarla."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.spotify_control import spotify_volume
+        return spotify_volume(level=req.level)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Ekran analizi endpoint'leri ──────────────────────────────────────────────
+
+class ScreenAnalyzeRequest(BaseModel):
+    question: str = "Ekranda ne var?"
+
+
+@app.post("/screen/analyze")
+async def screen_analyze_endpoint(req: ScreenAnalyzeRequest, x_api_key: str | None = Header(default=None)):
+    """Ekranı yakala ve LLM vision ile analiz et."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.screen_capture import analyze_screen
+        result = analyze_screen(question=req.question)
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("error", "Analiz başarısız"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/screen/capture")
+async def screen_capture_endpoint(x_api_key: str | None = Header(default=None)):
+    """Sadece ekran görüntüsü al (analiz yok), dosya olarak döndür."""
+    _check_auth(x_api_key)
+    import os as _os
+    from fastapi.responses import FileResponse
+    try:
+        from ARIA.tools.screen_capture import capture_screen
+        result = capture_screen()
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("error", "Ekran yakalanamadı"))
+        path = result["path"]
+        return FileResponse(
+            path,
+            media_type="image/png",
+            filename="aria_screen.png",
+            background=None,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Mail endpoint'leri ───────────────────────────────────────────────────────
+
+class MailSendRequest(BaseModel):
+    to: str
+    subject: str
+    body: str
+
+
+@app.post("/mail/send")
+async def mail_send_endpoint(req: MailSendRequest, x_api_key: str | None = Header(default=None)):
+    """Apple Mail üzerinden e-posta gönder."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.mail_control import send_email
+        result = send_email(to=req.to, subject=req.subject, body=req.body)
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("error", "E-posta gönderilemedi"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/mail/unread")
+async def mail_unread_endpoint(
+    count: int = 5,
+    x_api_key: str | None = Header(default=None),
+):
+    """Apple Mail'den okunmamış e-postaları listele."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.mail_control import get_unread_emails
+        emails = get_unread_emails(count=count)
+        return {"emails": emails, "count": len(emails)}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Ses döngüsü (voice round-trip) endpoint'i ────────────────────────────────
+
+@app.post("/speech/chat")
+async def speech_chat_endpoint(x_api_key: str | None = Header(default=None)):
+    """Single-shot sesli komut: kayıt → transkript → chat → seslendir.
+
+    5 saniye kayıt alır, transkript eder, ARIA'ya gönderir, cevabı seslendirir.
+    """
+    _check_auth(x_api_key)
+    import asyncio
+
+    try:
+        from ARIA.tools.audio_recorder import get_recorder, AUDIO_AVAILABLE
+        if not AUDIO_AVAILABLE:
+            raise HTTPException(status_code=501, detail="sounddevice yüklü değil")
+
+        recorder = get_recorder()
+
+        # Kaydı başlat
+        start_result = recorder.start()
+        if not start_result.get("success"):
+            raise HTTPException(status_code=500, detail=start_result.get("error", "Kayıt başlatılamadı"))
+
+        # 5 saniye bekle
+        await asyncio.sleep(5)
+
+        # Kaydı durdur ve transkript et
+        stop_result = recorder.stop_and_transcribe(language="tr")
+        transcript = stop_result.get("transcript", "").strip()
+
+        if not transcript:
+            return {
+                "success": False,
+                "transcript": "",
+                "response": "Ses algılanamadı, lütfen tekrar dene.",
+                "agent": "chat",
+            }
+
+        # Chat'e gönder
+        try:
+            from ARIA.tools.summarizer import summarize_text
+            reduced = summarize_text(transcript)
+        except Exception:
+            reduced = transcript
+
+        route = orchestrator.route(reduced)
+        agent_name = route.get("agent", "chat")
+
+        response_text = ""
+        for token in engine.stream_chat([{"role": "user", "content": reduced}]):
+            response_text += token
+
+        # Seslendir
+        try:
+            from ARIA.tools.tts import speak
+            speak(response_text, lang="tr", block=False)
+        except Exception as exc:
+            logger.warning("TTS hatası: %s", exc)
+
+        return {
+            "success": True,
+            "transcript": transcript,
+            "response": response_text,
+            "agent": agent_name,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:

@@ -77,6 +77,9 @@ class ARIAConfig:
     # Bildirimler
     notification_enabled: bool = True   # macOS desktop bildirimleri
 
+    # Hava durumu
+    weather_city: str = "Ankara"        # Hava durumu için şehir
+
 
 def load_config() -> ARIAConfig:
     """Disk'ten konfigürasyon yükle; yoksa varsayılanları kullan."""

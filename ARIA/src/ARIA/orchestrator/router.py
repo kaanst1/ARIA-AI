@@ -121,6 +121,40 @@ class Orchestrator:
             any(k in text for k in ["gönder", "at", "söyle", "ilet"])
         ):
             return {"agent": "chat", "reason": "whatsapp mesaj komutu"}
+
+        # ── Reminders özel tespiti ────────────────────────────────────────────
+        reminder_triggers = [
+            "reminder", "hatırlatıcı ekle", "hatırlatıcı", "reminders",
+            "görev ekle", "yapılacak ekle", "not ekle reminder",
+        ]
+        if any(k in text for k in reminder_triggers):
+            return {"agent": "chat", "reason": "reminder komutu"}
+
+        # ── Spotify özel tespiti ──────────────────────────────────────────────
+        spotify_triggers = [
+            "spotify", "müzik çal", "şarkı çal", "müzik aç",
+            "sıradaki", "sıradaki parça", "müziği durdur",
+            "müziği durdur", "şarkıyı atla", "ses seviyesi",
+        ]
+        if any(k in text for k in spotify_triggers):
+            return {"agent": "chat", "reason": "spotify müzik komutu"}
+
+        # ── Mail özel tespiti ─────────────────────────────────────────────────
+        mail_triggers = [
+            "mail gönder", "e-posta", "e-posta gönder", "mail at",
+            "gelen kutusu", "okunmamış mail", "okunmamış e-posta",
+        ]
+        if any(k in text for k in mail_triggers):
+            return {"agent": "chat", "reason": "e-posta komutu"}
+
+        # ── Ekran analizi özel tespiti ────────────────────────────────────────
+        screen_triggers = [
+            "ekrana bak", "ekranı analiz", "ekranda ne var", "screenshot",
+            "ekran görüntüsü", "ekranı incele",
+        ]
+        if any(k in text for k in screen_triggers):
+            return {"agent": "chat", "reason": "ekran analizi komutu"}
+
         for agent, keys in keyword_rules:
             if any(k in text for k in keys):
                 return {"agent": agent, "reason": "keyword eşleşmesi"}
