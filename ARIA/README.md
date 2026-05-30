@@ -18,19 +18,21 @@ uv pip install -e .
 ```bash
 brew install ollama
 ollama serve
-ollama pull qwen2.5:7b
+ollama pull qwen2.5:7b   # Ana model
+ollama pull llava:latest  # Görsel analiz için
 ```
 
-**API ve Frontend başlat:**
+**Başlat:**
 ```bash
-# Backend (terminal 1)
-aria-api
-
-# Frontend (terminal 2)
-cd frontend && npm install && npm run dev
+bash start.sh
+# → API: http://localhost:8000
+# → UI:  http://localhost:5173
 ```
 
-Tarayıcıda `http://localhost:5173` adresini aç.
+**Durdur:**
+```bash
+bash stop.sh
+```
 
 ---
 
@@ -38,67 +40,84 @@ Tarayıcıda `http://localhost:5173` adresini aç.
 
 ### 🧠 Çok Ajanlı Sistem
 
-ARIA her göreve özel ajan kullanır:
+ARIA her göreve özel ajan kullanır ve gerektiğinde ajanları otomatik zincirler:
 
 | Ajan | Tetikleyici | Ne Yapar |
 |------|-------------|----------|
 | `brief` | "günaydın", "sabah briefi" | Takvim + hava + sistem özeti, TTS ile seslendirir |
-| `researcher` | "araştır", "haber", "hava" | Web arama, RSS, kaynak toplama |
-| `deep_research` | "derin araştır", "kapsamlı" | Çok kaynaklı araştırma + atıf |
-| `coder` | "kod yaz", "debug", "hata" | Kod üretme, analiz, test |
-| `analyst` | "analiz et", "veri", "tablo" | Dosya/veri analizi |
-| `writer` | "makale", "tweet", "rapor" | İçerik üretme |
-| `memory` | "hatırla", "not al", "kaydet" | Semantik hafızaya kayıt/sorgulama |
-| `planner` | "planla", "adım adım" | Çok adımlı görev planlama |
-| `terminal` | "komut", "shell", "disk" | Sistem komutları |
+| `researcher` | "araştır", "haber" | Web arama, RSS, kaynak toplama |
+| `deep_research` | "derin araştır" | Çok kaynaklı araştırma + atıf |
+| `coder` | "kod yaz", "debug" | Kod üretme, analiz, test |
+| `analyst` | "analiz et", "veri" | Dosya/veri analizi |
+| `writer` | "makale", "tweet" | İçerik üretme |
+| `memory` | "hatırla", "kaydet" | Semantik hafızaya kayıt/sorgulama |
+| `planner` | "planla", "adım adım" | ReAct tabanlı çok adımlı görev |
+| `chain` | "araştır sonra yaz" | **Çok-ajan otomatik zinciri** |
+| `terminal` | "komut", "shell" | Sistem komutları |
 | `monitor` | "izle", "takip et" | Süreç ve alert izleme |
-| `chat` | genel sohbet | Doğrudan LLM yanıtı |
+
+#### Agent Zinciri (Chain)
+"Yapay zeka trendlerini araştır ve makale yaz" → ARIA otomatik olarak `researcher → writer` zinciri kurar, her adımın çıktısı bir sonrakine girer.
 
 ---
 
-### 🔧 Araçlar (35+ Tool)
+### 🔧 Araçlar (40+ Tool)
 
-#### macOS Sistem Entegrasyonu
+#### macOS Sistem
 | Araç | Komut Örneği |
 |------|--------------|
-| **Takvim** | "Bugün ne var?", "Yarın saat 15'e toplantı ekle" |
+| **Takvim** | "Bugün ne var?", "Yarın 15'e toplantı ekle" |
 | **Apple Mail** | "Okunmamış mailler", "X'e mail gönder" |
-| **iMessage** | "Y'ye mesaj gönder", "Okunmamış iMessage'lar" |
+| **iMessage** | "Y'ye mesaj gönder", "Okunmamış mesajlar" |
 | **WhatsApp** | "WhatsApp'tan Z'ye yaz" |
 | **Reminders** | "Alışveriş listesine süt ekle" |
 | **Apple Notes** | "Notlara ekle", "Notlarda ara" |
-| **Contacts** | "Ahmet'in telefonu", "Rehberde ara" |
-| **Spotlight** | "PDF dosyalarını bul", "Bu dosya nerede" |
+| **Contacts** | "Ahmet'in telefonu" |
+| **Spotlight** | "PDF dosyalarını bul" |
 | **Uygulama Kontrolü** | "Chrome'u aç", "Açık uygulamalar" |
 | **Odak Modu** | "DND aç", "Odak modunu kapat" |
 | **Ekran Analizi** | "Ekrana bak" — LLaVA görsel analiz |
 
-#### Medya & Ses
-| Araç | Komut Örneği |
-|------|--------------|
-| **Spotify** | "Müzik çal", "Sıradaki şarkı", "Ses %50" |
+#### Ses & Konuşma
+| Araç | Açıklama |
+|------|----------|
+| **Voice Mode** | `POST /voice/start` — sürekli dinle→yanıtla→dinle döngüsü, "dur aria" ile kapat |
+| **Wake Word** | "Hey ARIA" ile elleri serbest tetikleme (Whisper tiny) |
 | **TTS (Türkçe)** | Tüm yanıtlar Emel sesiyle seslendirilir |
-| **Ses Kaydı (Whisper)** | Mikrofon butonuyla konuş, otomatik transkript |
-| **Wake Word** | "Hey ARIA" ile elleri serbest tetikleme |
+| **Ses Kaydı** | Mikrofon butonu → Whisper transkript |
+
+#### Üretkenlik
+| Araç | Açıklama |
+|------|----------|
+| **Toplantı Asistanı** | `POST /meeting/start` → 15sn chunk Whisper transkript → `POST /meeting/stop` → LLM özet + aksiyon maddeleri + Notes'a kayıt |
+| **Pomodoro** | 25/5/15 dk döngü — TTS + macOS bildirimi |
+| **Git Zekası** | Commit özeti, git durumu, TODO tarama, diff analizi |
+| **Belge Q&A (RAG)** | PDF/DOCX/CSV yükle → ChromaDB → "Bu belgede ne yazıyor?" |
+| **Clipboard Geçmişi** | 2sn polling, 50 kayıt |
+| **Shell Runner** | Güvenli komut çalıştırma |
+
+#### Bilgi & Hafıza
+| Araç | Açıklama |
+|------|----------|
+| **Semantik Hafıza** | Her konuşma ChromaDB'ye kaydedilir, yeni sorularda otomatik bağlam enjeksiyonu |
+| **Obsidian** | Vault not oluştur, daily note'a ekle, grep arama — vault otomatik bulunur |
+| **Belge RAG** | PDF/TXT/DOCX/CSV indeksle, doğal dille sor |
+
+#### Güvenlik & Sistem
+| Araç | Açıklama |
+|------|----------|
+| **Keychain** | macOS Keychain güvenli credential yönetimi — `security` komutu üzerinden |
+| **Global Hotkey** | `Cmd+Shift+Space` — her uygulamadan ARIA'yı aç |
+| **Menu Bar** | macOS system tray ikonu (rumps) |
 
 #### Web & Araştırma
-| Araç | Komut Örneği |
-|------|--------------|
-| **Hava Durumu** | "Hava nasıl?", "3 günlük tahmin" |
-| **Web Arama** | DuckDuckGo tabanlı gizlilik odaklı arama |
-| **RSS** | Eklenen feed'lerden haber özeti |
-| **Tarayıcı Kontrolü** | "Chrome'da aç", "Aktif sekme ne" |
-| **Podcast Özeti** | YouTube/podcast özeti |
-
-#### Verimlilik
-| Araç | Komut Örneği |
-|------|--------------|
-| **Pomodoro** | "Pomodoro başlat", 25dk çalış/5dk mola + TTS bildirim |
-| **Git Zekası** | "Son commit'leri özetle", "TODO'ları tara", "Diff analizi" |
-| **Belge Q&A** | PDF/DOCX/CSV yükle → "Bu belgede ne yazıyor?" |
-| **Pano Geçmişi** | 2 saniyede bir otomatik kayıt, 50 giriş |
-| **Shell Runner** | Güvenli komut çalıştırma |
-| **Log Analizi** | Hata loglarını yorumla |
+| Araç | Açıklama |
+|------|----------|
+| **Hava Durumu** | Open-Meteo API — anlık + 7 günlük tahmin |
+| **Web Arama** | DuckDuckGo — gizlilik odaklı |
+| **RSS** | Feed'lerden haber özeti |
+| **Tarayıcı Kontrolü** | Safari/Chrome/Arc — URL aç, sekme, arama |
+| **Podcast Özeti** | YouTube/podcast transkript + özet |
 
 ---
 
@@ -107,25 +126,12 @@ ARIA her göreve özel ajan kullanır:
 #### Kısa Vadeli (SQLite)
 Her oturum saklanır. Context'e son 20 mesaj otomatik eklenir.
 
-#### Uzun Vadeli Semantik Hafıza (ChromaDB)
-- Her konuşma otomatik vektör hafızaya kaydedilir
-- Yeni sorularda ilgili geçmiş otomatik context'e enjekte edilir
-
+#### Uzun Vadeli Semantik (ChromaDB)
+Her konuşma vektör hafızaya kaydedilir. Yeni sorularda ilgili geçmiş otomatik enjekte edilir.
 ```
-"Meriç'in doğum günü 15 Mart" → Kalıcı hafızaya kaydedildi
+"Meriç'in doğum günü 15 Mart" → POST /memory
 # İleride:
 "Doğum gününe ne kadar var?" → ARIA otomatik hatırlar
-```
-
----
-
-### 📄 Belge Q&A (RAG)
-
-PDF, TXT, DOCX, CSV indeksle ve sor:
-
-```
-POST /documents/index  {"file_path": "/Users/meric/sozlesme.pdf"}
-POST /documents/query  {"question": "Sözleşme bitiş tarihi ne?"}
 ```
 
 ---
@@ -138,7 +144,7 @@ POST /documents/query  {"question": "Sözleşme bitiş tarihi ne?"}
 name: sabah_rutini
 trigger:
   type: schedule
-  cron: "30 7 * * 1-5"   # Hafta içi 07:30
+  cron: "30 7 * * 1-5"
 steps:
   - action: weather
     params: {}
@@ -148,46 +154,38 @@ steps:
     params: {title: "ARIA", message: "Günaydın!"}
 ```
 
-**Tetikleyiciler:** `schedule` (cron) veya `keyword` (kullanıcı mesajı)  
-**Aksiyonlar:** `brief`, `weather`, `tts`, `notify`, `get_unread_emails`, `chat`, `shell`, `remember`
+**Tetikleyiciler:** `schedule` (cron) | `keyword` (kullanıcı mesajında anahtar kelime)
 
 ---
 
-### 🤖 Akıllı Model Seçimi
+### 📄 Belge Q&A (RAG)
 
-| Karmaşıklık | Örnek | Model |
-|-------------|-------|-------|
-| Basit | "günaydın", "saat kaç" | `qwen2.5:3b` (hızlı) |
-| Orta | "haberleri özetle" | `qwen2.5:7b` |
-| Karmaşık | "derin araştırma yap" | `qwen2.5:14b` (varsa) |
-
----
-
-### 📧 Email Zekası
-
-- **Sınıflandırma**: acil / toplantı / fatura / spam / iş
-- **Toplantı tespiti**: Zoom/Teams linki, tarih/saat otomatik çıkarımı
-- **Taslak yanıt**: Ton seçimiyle otomatik üretim
-- **Smart Inbox**: `GET /email/smart-inbox`
+```
+# Frontend'de 📄 butonuyla sürükle-bırak
+# veya API:
+POST /documents/upload   (multipart/form-data)
+POST /documents/query    {"question": "..."}
+GET  /documents          # İndekslenmiş belgeler
+```
 
 ---
 
 ### 📊 Analytics Dashboard
 
-Frontend'de DASHBOARD butonu ile açılır:
+Frontend'de **DASHBOARD** butonu:
 - Toplam mesaj ve 7 günlük trend
-- Ajan kullanım çubuğu grafikleri
+- Ajan kullanım çubuk grafikleri
 - Saatlik aktivite dağılımı
 
 ---
 
-### 🔔 Proaktif Bildirimler (Arka Plan)
+### 🔔 Proaktif Bildirimler
 
 | Zamanlama | Eylem |
 |-----------|-------|
 | Sabah 08:00 | Sabah briefi bildirimi |
-| Her 10 dk | 15 dk içinde toplantı varsa uyarı |
-| Her 5 dk | CPU/RAM %90+ ise kaynak uyarısı |
+| Her 10 dk | 15 dk içinde toplantı → uyarı |
+| Her 5 dk | CPU/RAM >%90 → kaynak uyarısı |
 | Her saat | RSS yeni içerik kontrolü |
 | Her 30 dk | Bağlam analizi + akıllı öneri |
 | Her Cuma 18:00 | Haftalık kullanım raporu |
@@ -195,31 +193,81 @@ Frontend'de DASHBOARD butonu ile açılır:
 
 ---
 
-### 🎯 Bağlam Farkındalığı
+### 📱 iOS Shortcut Entegrasyonu
 
-ARIA aktif uygulamayı ve takvimi analiz eder:
-- VS Code açıksa → Kod yardımı önerisi
-- Mail açıksa → Gelen kutusu özeti
-- 15 dk içinde toplantı → Hazırlık notu teklifi
-- Sabah 07-09 → Brief hatırlatması
+Siri Shortcut'ta "URL Al" aksiyonuyla:
+
+```
+POST http://aria-ip:8000/shortcut
+{"message": "hava nasıl", "format": "text"}
+
+GET  http://aria-ip:8000/shortcut/brief    # Sabah briefi (düz metin)
+GET  http://aria-ip:8000/shortcut/weather  # Hava durumu (tek satır)
+```
 
 ---
 
-## API Referansı
+## Klavye Kısayolları (Frontend)
+
+| Kısayol | Eylem |
+|---------|-------|
+| `Cmd+K` | Command Palette — 15 komut, arrow key navigasyon |
+| `Cmd+Shift+K` | Yeni oturum |
+| `Cmd+Shift+Space` | ARIA'yı sistem genelinde aç |
+| `?` | Klavye kısayol rehberi |
+| `Escape` | Modalları kapat |
+| `Drag & Drop` | Dosya analiz et / belge yükle |
+
+---
+
+## CLI Komutları
+
+```bash
+aria doctor                           # Sistem sağlık kontrolü
+aria ask "günaydın"                   # Tek seferlik soru
+aria ask "araştır kuantum" --agent researcher
+aria memory search "geçen haftaki proje"
+aria memory add "Meriç'in doğum günü 15 Mart"
+aria memory count
+aria workflow list
+aria workflow run sabah_rutini
+aria workflow delete eski_workflow
+aria config show
+aria config set weather_city Istanbul
+aria config set model qwen2.5:14b
+aria report weekly
+aria report daily
+aria serve --port 8000
+aria doctor
+```
+
+---
+
+## API Referansı (125 endpoint)
 
 ### Temel
 ```
-POST /chat              — Streaming chat
+POST /chat              — Streaming chat (SSE)
 GET  /status            — Sistem durumu
 GET  /models            — Yüklü modeller
+GET  /models/smart-select?query=...
+GET  /config | PATCH /config
 ```
 
-### Oturumlar
+### Ses & Voice
 ```
-GET    /sessions
-POST   /sessions
-DELETE /sessions/{id}
-GET    /sessions/{id}/export
+POST /voice/start | /voice/stop | GET /voice/status
+POST /speech/chat         — STT + LLM + TTS döngüsü
+POST /speak | /speak/stop
+POST /speech/record/start | /speech/record/stop
+GET  /wake-word/status
+```
+
+### Oturumlar & Hafıza
+```
+GET/POST /sessions | DELETE /sessions/{id}
+GET  /sessions/{id}/export
+POST /memory | GET /memory/search
 ```
 
 ### macOS Araçları
@@ -228,10 +276,9 @@ GET  /weather | /weather/forecast
 POST /notes | GET /notes | GET /notes/search
 POST /app/open | /app/quit | GET /app/running
 GET  /contacts/search
-POST /focus/enable | /focus/disable | GET /focus/status
+POST /focus/enable | /focus/disable
 GET  /spotlight/search
 GET  /clipboard/history
-POST /calendar/add | GET /brief/calendar
 GET  /context/suggest | /context/frontmost-app | /context/upcoming-meetings
 ```
 
@@ -244,43 +291,60 @@ POST /imessage/send | GET /imessage/unread
 POST /whatsapp/send
 ```
 
-### Hafıza & Belge
+### Belge & RAG
 ```
-POST /memory | GET /memory/search
-POST /documents/index | /documents/query | GET /documents
+POST /documents/upload | /documents/index | /documents/query
+GET  /documents
 ```
 
-### Workflow
+### Toplantı
 ```
-GET    /workflows
-POST   /workflows
-POST   /workflows/{name}/run
+POST /meeting/start | /meeting/stop
+GET  /meeting/status | /meeting/list
+```
+
+### Obsidian
+```
+GET  /obsidian/info
+POST /obsidian/setup | /obsidian/note | /obsidian/daily
+GET  /obsidian/search | /obsidian/note
+```
+
+### Keychain
+```
+POST /keychain/set | GET /keychain/get
+DELETE /keychain/{key} | GET /keychain/list
+```
+
+### Workflow & Otomasyon
+```
+GET/POST /workflows
+POST /workflows/{name}/run
 DELETE /workflows/{name}
+POST /chain              — Çok-ajan zinciri
 ```
 
-### Verimlilik
+### Üretkenlik
 ```
 POST /pomodoro/start | /pomodoro/stop | GET /pomodoro/status
 GET  /git/log | /git/status | /git/todos
-POST /reports/weekly | GET /reports/list | /reports/daily
+POST /reports/weekly | GET /reports/list
 GET  /health/summary | /health/steps
-```
-
-### Analitik
-```
-GET /analytics/usage
-GET /analytics/patterns
-GET /models/smart-select
+GET  /analytics/usage | /analytics/patterns
 ```
 
 ### Medya
 ```
-POST /speak | /speak/stop | GET /speak/status
 POST /spotify/play | /spotify/pause | /spotify/next
 GET  /spotify/current | POST /spotify/volume
 POST /screen/analyze | GET /screen/capture
-POST /speech/chat | /speech/record/start | /speech/record/stop
-GET  /wake-word/status
+```
+
+### iOS Shortcut
+```
+POST /shortcut           — Genel sorgu (düz metin yanıt)
+GET  /shortcut/brief     — Sabah briefi
+GET  /shortcut/weather   — Hava durumu
 ```
 
 ---
@@ -300,9 +364,13 @@ GET  /wake-word/status
   "notification_enabled": true,
   "conversation_history_limit": 20,
   "cloud_fallback": false,
-  "telemetry": false
+  "telemetry": false,
+  "temperature": 0.7,
+  "max_tokens": 4096
 }
 ```
+
+Frontend'deki ⚙️ butonu ile UI'dan değiştirilebilir.
 
 ---
 
@@ -310,52 +378,81 @@ GET  /wake-word/status
 
 ```
 ARIA/
+├── start.sh / stop.sh          # Tek komutla başlat/durdur
 ├── src/ARIA/
-│   ├── api.py                    # FastAPI (70+ endpoint)
-│   ├── agents/                   # 11 özel ajan
-│   ├── orchestrator/router.py    # Kural + LLM yönlendirici
+│   ├── api.py                  # FastAPI (125 endpoint)
+│   ├── agents/                 # 11 ajan + chain
+│   │   └── chain.py            # LLM tabanlı otomatik zincir
+│   ├── orchestrator/router.py  # Kural + LLM yönlendirici
 │   ├── core/
-│   │   ├── engine.py             # Ollama wrapper
-│   │   ├── config.py             # Konfigürasyon
-│   │   └── smart_router.py       # Karmaşıklık bazlı model seçimi
+│   │   ├── engine.py           # Ollama wrapper
+│   │   ├── config.py           # Konfigürasyon
+│   │   └── smart_router.py     # Karmaşıklık bazlı model seçimi
 │   ├── memory/
-│   │   ├── conversation_store.py # SQLite oturum hafızası
-│   │   ├── vector_memory.py      # ChromaDB semantik hafıza
-│   │   └── semantic_context.py   # Otomatik bağlam enjeksiyonu
+│   │   ├── conversation_store.py  # SQLite oturum hafızası
+│   │   ├── vector_memory.py       # ChromaDB semantik hafıza
+│   │   └── semantic_context.py    # Otomatik bağlam enjeksiyonu
 │   ├── automation/
-│   │   └── workflow_engine.py    # YAML workflow motoru
+│   │   └── workflow_engine.py  # YAML workflow motoru
 │   ├── scheduler/
-│   │   └── proactive.py          # Arka plan zamanlayıcı (8 görev)
+│   │   └── proactive.py        # Arka plan zamanlayıcı (8 görev)
 │   ├── learning/
-│   │   └── tracker.py            # Kullanım takibi + pattern analizi
-│   └── tools/                    # 35+ araç modülü
-├── frontend/                     # React HUD arayüzü
-└── presets/                      # Hazır yapılandırma şablonları
+│   │   └── tracker.py          # Kullanım takibi + pattern analizi
+│   └── tools/                  # 40+ araç modülü
+│       ├── voice_mode.py       # Sürekli ses döngüsü
+│       ├── meeting_assistant.py # Toplantı transkript + özet
+│       ├── obsidian.py         # Vault entegrasyonu
+│       ├── keychain.py         # macOS Keychain
+│       ├── weather.py          # Open-Meteo API
+│       └── ...
+├── frontend/                   # React HUD arayüzü
+│   └── src/App.jsx             # Command Palette, Settings, Documents
+└── tests/                      # 27 birim testi
+```
+
+---
+
+## Obsidian Kurulumu
+
+```bash
+# Vault yolunu ayarla (bir kez)
+curl -X POST http://localhost:8000/obsidian/setup \
+  -H "Content-Type: application/json" \
+  -d '{"vault_path": "/Users/meric/Documents/MyVault"}'
+
+# Kullanım
+curl -X POST http://localhost:8000/obsidian/daily \
+  -H "Content-Type: application/json" \
+  -d '{"content": "ARIA ile not aldım", "heading": "Notlar"}'
 ```
 
 ---
 
 ## Gizlilik
 
-- Tüm LLM çağrıları `localhost:11434` (Ollama) üzerinden
+- Tüm LLM çağrıları `localhost:11434` (Ollama)
 - Web arama: DuckDuckGo — kullanıcı verisi içermeyen sorgular
+- Hava durumu: Open-Meteo — şehir koordinatı gönderilir, kişisel veri yok
 - Telemetri: **Kapalı**
 - Bulut fallback: **Kapalı**
-- Tüm veriler `~/.aria/` altında yerel olarak saklanır
+- Tüm veriler `~/.aria/` altında yerel saklanır
+- API key'ler macOS Keychain'de şifreli saklanır
 
 ---
 
 ## Gereksinimler
 
 - macOS 13+ (Ventura veya üzeri)
-- Python 3.9+
-- Ollama (`qwen2.5:7b` minimum)
+- Python 3.9+ (3.14 için `start.sh` kullan)
+- Ollama (`qwen2.5:7b` minimum, `llava` görsel için)
 - Node.js 18+ (frontend)
-- `uv` paket yöneticisi (önerilir)
+- `uv` paket yöneticisi
 
 **Opsiyonel:**
 - `rumps` — Menu bar ikonu
+- `pynput` — Global hotkey
 - `pymupdf` / `python-docx` — PDF/Word işleme
+- `sounddevice` + `faster-whisper` — Ses özellikleri
 
 ---
 

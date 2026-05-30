@@ -22,29 +22,43 @@ def test_weather_current_offline():
 
 
 def test_weather_current_success():
-    fake_response = json.dumps({
-        "current_condition": [{
-            "temp_C": "22",
-            "FeelsLikeC": "20",
-            "weatherDesc": [{"value": "Sunny"}],
-            "lang_tr": [{"value": "Güneşli"}],
-            "humidity": "40",
-            "windspeedKmph": "15",
-        }],
-        "weather": [],
+    """Open-Meteo formatında sahte yanıt ile weather_current testi."""
+    # Geocoding yanıtı
+    geo_response = json.dumps({
+        "results": [{"latitude": 39.92, "longitude": 32.85, "name": "Ankara"}]
+    }).encode()
+    # Forecast yanıtı
+    forecast_response = json.dumps({
+        "current": {
+            "temperature_2m": 22.0,
+            "apparent_temperature": 20.0,
+            "relative_humidity_2m": 40,
+            "weather_code": 1,
+            "wind_speed_10m": 15.0,
+        }
     }).encode()
 
-    mock_resp = MagicMock()
-    mock_resp.__enter__ = lambda s: s
-    mock_resp.__exit__ = MagicMock(return_value=False)
-    mock_resp.read.return_value = fake_response
+    call_count = 0
+    def fake_urlopen(req, timeout=None):
+        nonlocal call_count
+        call_count += 1
+        mock = MagicMock()
+        mock.__enter__ = lambda s: s
+        mock.__exit__ = MagicMock(return_value=False)
+        # İlk çağrı geocoding, ikinci çağrı forecast
+        mock.read.return_value = geo_response if call_count == 1 else forecast_response
+        return mock
 
-    with patch("urllib.request.urlopen", return_value=mock_resp):
+    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        from ARIA.tools import weather as weather_mod
+        weather_mod._geocode.cache_clear()  # lru_cache temizle
         from ARIA.tools.weather import weather_current
         r = weather_current("Ankara")
+
     assert r["success"] is True
-    assert r["temp_c"] == 22
+    assert r["temp_c"] == 22.0
     assert r["city"] == "Ankara"
+    assert r["humidity"] == 40
 
 
 # ── Smart Router ──────────────────────────────────────────────────────────────
