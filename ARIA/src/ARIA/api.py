@@ -1942,6 +1942,326 @@ async def config_update(req: ConfigUpdateRequest, x_api_key: str | None = Header
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+# ── Voice Mode ───────────────────────────────────────────────────────────────
+
+@app.post("/voice/start")
+async def voice_start(x_api_key: str | None = Header(default=None)):
+    """Sürekli ses konuşma modunu başlat."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.voice_mode import start_voice_mode
+        return start_voice_mode()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/voice/stop")
+async def voice_stop(x_api_key: str | None = Header(default=None)):
+    """Voice mode'u durdur."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.voice_mode import stop_voice_mode
+        return stop_voice_mode()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/voice/status")
+async def voice_status(x_api_key: str | None = Header(default=None)):
+    """Voice mode durumu."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.voice_mode import is_voice_active
+        return {"active": is_voice_active()}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Agent Zinciri ─────────────────────────────────────────────────────────────
+
+class ChainRequest(BaseModel):
+    message: str
+    session_id: int | None = None
+
+
+@app.post("/chain")
+async def chain_run(req: ChainRequest, x_api_key: str | None = Header(default=None)):
+    """Çok-ajan zinciri çalıştır."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.agents.chain import run_chain
+        result = run_chain(req.message)
+        return {
+            "success": result.success,
+            "description": result.description,
+            "final_output": result.final_output,
+            "steps": [
+                {"agent": s.agent, "task": s.task[:100], "success": s.success, "result": s.result[:500]}
+                for s in result.steps
+            ],
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Toplantı Asistanı ─────────────────────────────────────────────────────────
+
+class MeetingStartRequest(BaseModel):
+    title: str = ""
+
+
+@app.post("/meeting/start")
+async def meeting_start_endpoint(req: MeetingStartRequest, x_api_key: str | None = Header(default=None)):
+    """Toplantı kaydını başlat."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.meeting_assistant import meeting_start
+        return meeting_start(req.title)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/meeting/stop")
+async def meeting_stop_endpoint(x_api_key: str | None = Header(default=None)):
+    """Toplantıyı durdur, özet üret."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.meeting_assistant import meeting_stop
+        return meeting_stop(save_to_notes=True)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/meeting/status")
+async def meeting_status_endpoint(x_api_key: str | None = Header(default=None)):
+    """Aktif toplantı durumu."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.meeting_assistant import meeting_status
+        return meeting_status()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/meeting/list")
+async def meeting_list_endpoint(limit: int = 10, x_api_key: str | None = Header(default=None)):
+    """Kayıtlı toplantıları listele."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.meeting_assistant import meeting_list
+        return meeting_list(limit)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Obsidian ─────────────────────────────────────────────────────────────────
+
+class ObsidianNoteRequest(BaseModel):
+    title: str
+    content: str
+    folder: str = ""
+    tags: list[str] = []
+    open_after: bool = False
+
+
+class ObsidianDailyRequest(BaseModel):
+    content: str
+    heading: str = ""
+
+
+class ObsidianSetupRequest(BaseModel):
+    vault_path: str
+
+
+@app.get("/obsidian/info")
+async def obsidian_info(x_api_key: str | None = Header(default=None)):
+    """Obsidian vault bilgisi."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.obsidian import obsidian_vault_info
+        return obsidian_vault_info()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/obsidian/setup")
+async def obsidian_setup_endpoint(req: ObsidianSetupRequest, x_api_key: str | None = Header(default=None)):
+    """Obsidian vault yolunu ayarla."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.obsidian import obsidian_setup
+        return obsidian_setup(req.vault_path)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/obsidian/note")
+async def obsidian_create_note_endpoint(req: ObsidianNoteRequest, x_api_key: str | None = Header(default=None)):
+    """Obsidian'da yeni not oluştur."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.obsidian import obsidian_create_note
+        return obsidian_create_note(req.title, req.content, req.folder, req.tags, req.open_after)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/obsidian/daily")
+async def obsidian_daily_endpoint(req: ObsidianDailyRequest, x_api_key: str | None = Header(default=None)):
+    """Daily note'a içerik ekle."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.obsidian import obsidian_append_daily
+        return obsidian_append_daily(req.content, req.heading)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/obsidian/search")
+async def obsidian_search_endpoint(q: str, limit: int = 10, x_api_key: str | None = Header(default=None)):
+    """Obsidian vault'ta ara."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.obsidian import obsidian_search
+        return obsidian_search(q, limit)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/obsidian/note")
+async def obsidian_get_note_endpoint(title: str, x_api_key: str | None = Header(default=None)):
+    """Obsidian notunu getir."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.obsidian import obsidian_get_note
+        return obsidian_get_note(title)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Keychain ──────────────────────────────────────────────────────────────────
+
+class KeychainSetRequest(BaseModel):
+    key: str
+    value: str
+    account: str = "aria"
+
+
+@app.post("/keychain/set")
+async def keychain_set_endpoint(req: KeychainSetRequest, x_api_key: str | None = Header(default=None)):
+    """Keychain'e güvenli değer kaydet."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.keychain import keychain_set
+        return keychain_set(req.key, req.value, req.account)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/keychain/get")
+async def keychain_get_endpoint(key: str, account: str = "aria", x_api_key: str | None = Header(default=None)):
+    """Keychain'den değer oku."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.keychain import keychain_get
+        return keychain_get(key, account)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.delete("/keychain/{key}")
+async def keychain_delete_endpoint(key: str, account: str = "aria", x_api_key: str | None = Header(default=None)):
+    """Keychain'den sil."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.keychain import keychain_delete
+        return keychain_delete(key, account)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/keychain/list")
+async def keychain_list_endpoint(x_api_key: str | None = Header(default=None)):
+    """Kayıtlı anahtarları listele."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.keychain import keychain_list
+        return keychain_list()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── iOS Shortcut Bridge ───────────────────────────────────────────────────────
+
+class ShortcutRequest(BaseModel):
+    message: str
+    agent: str | None = None
+    voice_response: bool = False  # TTS ile de seslendir
+    format: str = "text"          # "text" | "json" | "brief"
+
+
+@app.post("/shortcut")
+async def shortcut_endpoint(req: ShortcutRequest, x_api_key: str | None = Header(default=None)):
+    """iOS Shortcuts için optimize edilmiş basit endpoint.
+
+    Siri Shortcut'tan çağrılmak üzere tasarlanmıştır.
+    Yanıt her zaman düz metin veya kısa JSON döndürür.
+    """
+    _check_auth(x_api_key)
+    try:
+        response_text = orchestrator.dispatch(req.message)
+
+        if req.voice_response:
+            try:
+                from ARIA.tools.tts import speak
+                speak(response_text, lang="tr", block=False)
+            except Exception:
+                pass
+
+        if req.format == "brief":
+            # 280 karakter — tweet/bildirim boyutu
+            return {"response": response_text[:280]}
+        elif req.format == "json":
+            return {"message": req.message, "response": response_text}
+        else:
+            # Düz metin — Shortcuts'ta en kolay
+            from fastapi.responses import PlainTextResponse
+            return PlainTextResponse(response_text)
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/shortcut/brief")
+async def shortcut_brief(x_api_key: str | None = Header(default=None)):
+    """iOS Widget için sabah briefi — düz metin."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.agents.brief import BriefAgent
+        brief = BriefAgent().run(speak=False)
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(brief)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/shortcut/weather")
+async def shortcut_weather(x_api_key: str | None = Header(default=None)):
+    """iOS Widget için hava durumu — tek satır."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.weather import weather_current
+        d = weather_current()
+        if d.get("success"):
+            text = f"{d['city']}: {d['temp_c']}°C, {d['desc']}"
+        else:
+            text = "Hava durumu alınamadı"
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(text)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:

@@ -32,10 +32,11 @@ function ToastContainer({ toasts, onRemove }) {
 const SHORTCUTS = [
   { keys: "Enter", desc: "Mesaj gönder" },
   { keys: "Shift+Enter", desc: "Yeni satır" },
+  { keys: "Cmd+K", desc: "Command Palette aç" },
+  { keys: "Cmd+Shift+K", desc: "Yeni oturum" },
   { keys: "Cmd+Shift+Space", desc: "ARIA'yı global aç (sistem geneli)" },
-  { keys: "?", desc: "Bu yardım penceresini aç/kapat" },
-  { keys: "Escape", desc: "Ayarları/yardımı kapat" },
-  { keys: "Ctrl+K", desc: "Yeni oturum aç" },
+  { keys: "?", desc: "Klavye kısayol rehberi" },
+  { keys: "Escape", desc: "Modalları kapat" },
   { keys: "Drag & Drop", desc: "Dosya analiz et / belge yükle" },
 ];
 
@@ -343,6 +344,95 @@ function DigitalClock() {
   return <span className="topbar-clock">{time}</span>;
 }
 
+// ── Command Palette ───────────────────────────────────────────────────────────
+
+const PALETTE_COMMANDS = [
+  { id: "brief",      label: "Sabah Briefi",         icon: "🌅", cmd: "sabah briefi" },
+  { id: "weather",    label: "Hava Durumu",           icon: "🌤", cmd: "hava nasıl" },
+  { id: "calendar",   label: "Bugünkü Takvim",        icon: "📅", cmd: "bugünkü etkinlikler" },
+  { id: "pomodoro",   label: "Pomodoro Başlat",       icon: "🍅", cmd: "pomodoro başlat" },
+  { id: "inbox",      label: "Smart Inbox",           icon: "📬", cmd: "akıllı gelen kutusu" },
+  { id: "notes",      label: "Not Oluştur",           icon: "📝", action: "open_notes_prompt" },
+  { id: "voice",      label: "Voice Mode Aç",         icon: "🎙", cmd: "voice mode aç" },
+  { id: "research",   label: "Araştırma Başlat",      icon: "🔍", action: "open_research_prompt" },
+  { id: "chain",      label: "Agent Zinciri",         icon: "⛓", action: "open_chain_prompt" },
+  { id: "meeting",    label: "Toplantı Başlat",       icon: "📹", cmd: "toplantı başlat" },
+  { id: "git",        label: "Git Özeti",             icon: "🌿", cmd: "son commit'leri özetle" },
+  { id: "focus",      label: "Odak Modu",             icon: "🎯", cmd: "odak modunu aç" },
+  { id: "system",     label: "Sistem Durumu",         icon: "🖥", cmd: "sistem durumu" },
+  { id: "memory",     label: "Hafızada Ara",          icon: "🧠", action: "open_memory_prompt" },
+  { id: "obsidian",   label: "Obsidian Vault Bilgisi",icon: "🔮", cmd: "obsidian vault bilgisi" },
+];
+
+function CommandPalette({ onClose, onCommand, addToast }) {
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState(0);
+  const inputRef = useRef(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const filtered = PALETTE_COMMANDS.filter(
+    (c) => !query || c.label.toLowerCase().includes(query.toLowerCase()) || c.id.includes(query.toLowerCase())
+  );
+
+  const execute = (cmd) => {
+    onClose();
+    if (cmd.cmd) {
+      onCommand(cmd.cmd);
+    } else if (cmd.action === "open_notes_prompt") {
+      onCommand("not al: ");
+    } else if (cmd.action === "open_research_prompt") {
+      onCommand("araştır: ");
+    } else if (cmd.action === "open_chain_prompt") {
+      onCommand("önce araştır sonra yaz: ");
+    } else if (cmd.action === "open_memory_prompt") {
+      onCommand("hafızada ara: ");
+    }
+  };
+
+  const onKey = (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); setSelected((s) => Math.min(s + 1, filtered.length - 1)); }
+    if (e.key === "ArrowUp")   { e.preventDefault(); setSelected((s) => Math.max(s - 1, 0)); }
+    if (e.key === "Enter" && filtered[selected]) execute(filtered[selected]);
+    if (e.key === "Escape") onClose();
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="palette" onClick={(e) => e.stopPropagation()}>
+        <div className="palette-search">
+          <span className="palette-icon">❯</span>
+          <input
+            ref={inputRef}
+            className="palette-input"
+            placeholder="Komut ara… (↑↓ seç, Enter çalıştır)"
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setSelected(0); }}
+            onKeyDown={onKey}
+          />
+          <kbd className="palette-esc" onClick={onClose}>ESC</kbd>
+        </div>
+        <div className="palette-list">
+          {filtered.length === 0 && (
+            <div className="palette-empty">Komut bulunamadı — direkt mesaj olarak gönder</div>
+          )}
+          {filtered.map((cmd, i) => (
+            <div
+              key={cmd.id}
+              className={`palette-item${i === selected ? " palette-item--selected" : ""}`}
+              onClick={() => execute(cmd)}
+              onMouseEnter={() => setSelected(i)}
+            >
+              <span className="palette-item-icon">{cmd.icon}</span>
+              <span className="palette-item-label">{cmd.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Hızlı komut butonları ─────────────────────────────────────────────────────
 
 const QUICK_COMMANDS = [
@@ -418,6 +508,7 @@ export default function App() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showDocuments, setShowDocuments] = useState(false);
+  const [showPalette, setShowPalette] = useState(false);
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -914,9 +1005,15 @@ export default function App() {
         setShowShortcuts(false);
         setShowSettings(false);
         setShowDocuments(false);
+        setShowPalette(false);
       }
-      // Ctrl+K → yeni oturum
+      // Cmd+K → Command Palette
       if (e.key === "k" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+        e.preventDefault();
+        setShowPalette((p) => !p);
+      }
+      // Cmd+Shift+K → yeni oturum
+      if (e.key === "k" && (e.ctrlKey || e.metaKey) && e.shiftKey) {
         e.preventDefault();
         handleNewSession();
       }
@@ -976,6 +1073,7 @@ export default function App() {
           </span>
         </div>
         <div className="topbar-right">
+          <button className="topbar-btn" onClick={() => setShowPalette(true)} title="Command Palette (Cmd+K)">⌘K</button>
           <button className="topbar-btn" onClick={() => setShowDocuments(true)} title="Belge Q&A">📄</button>
           <button className="topbar-btn" onClick={() => setShowSettings(true)} title="Ayarlar">⚙️</button>
           <button className="topbar-btn" onClick={() => setShowShortcuts(true)} title="Klavye kısayolları (?)">?</button>
@@ -987,6 +1085,17 @@ export default function App() {
       {showShortcuts && <ShortcutModal onClose={() => setShowShortcuts(false)} />}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} onSave={() => {}} addToast={addToast} />}
       {showDocuments && <DocumentModal onClose={() => setShowDocuments(false)} addToast={addToast} />}
+      {showPalette && (
+        <CommandPalette
+          onClose={() => setShowPalette(false)}
+          addToast={addToast}
+          onCommand={(cmd) => {
+            setShowPalette(false);
+            setInput(cmd);
+            setTimeout(() => textareaRef.current?.focus(), 50);
+          }}
+        />
+      )}
 
       {/* ═══ TOAST ══════════════════════════════════════════════════════════════ */}
       <ToastContainer toasts={toasts} onRemove={removeToast} />

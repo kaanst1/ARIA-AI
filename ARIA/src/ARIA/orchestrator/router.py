@@ -238,6 +238,33 @@ class Orchestrator:
         if any(k in text for k in ["ne önerirsin", "şu an ne yapayım", "bağlam önerisi"]):
             return {"agent": "chat", "reason": "bağlam önerisi"}
 
+        # ── Agent zinciri tespiti ─────────────────────────────────────────────
+        chain_triggers = [
+            "önce araştır sonra", "araştır ve yaz", "araştır ve özetle",
+            "sonra tweet", "ve makale yaz", "ardından", "sırayla yap",
+            "birden fazla adım", "zincir",
+        ]
+        if any(k in text for k in chain_triggers):
+            return {"agent": "chain", "reason": "çok-adım zincir"}
+
+        # ── Voice mode tespiti ────────────────────────────────────────────────
+        if any(k in text for k in ["voice mode aç", "ses modunu aç", "dinlemeye başla", "sürekli dinle"]):
+            return {"agent": "chat", "reason": "voice mode komutu"}
+
+        # ── Toplantı asistanı tespiti ─────────────────────────────────────────
+        if any(k in text for k in ["toplantı başlat", "toplantı kaydı", "toplantıyı kaydet", "meeting start"]):
+            return {"agent": "chat", "reason": "toplantı asistanı komutu"}
+        if any(k in text for k in ["toplantıyı bitir", "toplantı bitti", "meeting stop", "kaydı bitir"]):
+            return {"agent": "chat", "reason": "toplantı bitir komutu"}
+
+        # ── Obsidian tespiti ──────────────────────────────────────────────────
+        if any(k in text for k in ["obsidian", "vault'a", "vault a", "daily note", "not oluştur obsidian"]):
+            return {"agent": "chat", "reason": "obsidian komutu"}
+
+        # ── Keychain tespiti ──────────────────────────────────────────────────
+        if any(k in text for k in ["keychain", "api key kaydet", "şifre kaydet", "credential"]):
+            return {"agent": "chat", "reason": "keychain komutu"}
+
         for agent, keys in keyword_rules:
             if any(k in text for k in keys):
                 return {"agent": agent, "reason": "keyword eşleşmesi"}

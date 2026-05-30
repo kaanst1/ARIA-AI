@@ -10,6 +10,7 @@ from ARIA.agents.writer import WriterAgent
 from ARIA.agents.planner import PlannerAgent
 from ARIA.agents.terminal_agent import TerminalAgent
 from ARIA.agents.research_agent import DeepResearchAgent
+from ARIA.agents.chain import ChainAgent
 
 # Tool'ları yükle — @register_tool decorator'larını tetikler
 try:
@@ -24,19 +25,13 @@ try:
         clipboard_history, document_qa, email_intelligence,
         wake_word, context_awareness, pomodoro, imessage,
         git_intelligence, weekly_report, health,
+        voice_mode, meeting_assistant, obsidian, keychain,
     )
 except Exception:
     pass
 
 __all__ = [
-    "AnalystAgent",
-    "BriefAgent",
-    "CoderAgent",
-    "MemoryAgent",
-    "MonitorAgent",
-    "ResearcherAgent",
-    "WriterAgent",
-    "PlannerAgent",
-    "TerminalAgent",
-    "DeepResearchAgent",
+    "AnalystAgent", "BriefAgent", "CoderAgent", "MemoryAgent",
+    "MonitorAgent", "ResearcherAgent", "WriterAgent", "PlannerAgent",
+    "TerminalAgent", "DeepResearchAgent", "ChainAgent",
 ]
