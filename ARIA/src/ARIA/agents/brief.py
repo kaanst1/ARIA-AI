@@ -42,47 +42,13 @@ def _get_calendar_data() -> tuple[list[dict], list[dict]]:
 
 
 def _get_ankara_weather() -> str:
-    """Hava durumunu wttr.in'den çek (şehir config'den alınır)."""
+    """Hava durumunu Open-Meteo'dan çek (şehir config'den alınır)."""
     try:
-        import urllib.request
-        import urllib.parse
-        config = load_config()
-        city = getattr(config, "weather_city", "Ankara")
-        encoded_city = urllib.parse.quote(city)
-        url = f"https://wttr.in/{encoded_city}?format=%t+%C"
-        with urllib.request.urlopen(url, timeout=5) as resp:
-            raw = resp.read().decode().strip()
-        # "+21°C Light Rain With Thunderstorm" → "21 derece, hafif yağmurlu"
-        # Türkçe'ye çevir
-        tr_map = {
-            "Light Rain With Thunderstorm": "gök gürültülü hafif yağmurlu",
-            "Heavy Rain With Thunderstorm": "gök gürültülü sağanak yağışlı",
-            "Moderate Rain With Thunderstorm": "gök gürültülü yağmurlu",
-            "Patchy rain nearby": "aralıklı yağmurlu",
-            "Patchy rain possible": "aralıklı yağmur olası",
-            "Partly cloudy": "parçalı bulutlu",
-            "Thunderstorm": "gök gürültülü fırtınalı",
-            "Light rain": "hafif yağmurlu",
-            "Moderate rain": "yağmurlu",
-            "Heavy rain": "sağanak yağışlı",
-            "Light snow": "hafif karlı",
-            "Blizzard": "tipi",
-            "Freezing": "dondurucu soğuk",
-            "Sunny": "güneşli",
-            "Clear": "açık",
-            "Cloudy": "bulutlu",
-            "Overcast": "kapalı",
-            "Mist": "sisli",
-            "Fog": "sisli",
-            "Snow": "karlı",
-            "With": "ile",
-        }
-        parts = raw.split(" ", 1)
-        temp = parts[0].replace("+", "").replace("°C", "")
-        desc = parts[1] if len(parts) > 1 else ""
-        for en, tr in tr_map.items():
-            desc = desc.replace(en, tr)
-        return f"{temp} derece, {desc.strip().lower()}"
+        from ARIA.tools.weather import weather_current
+        result = weather_current()
+        if result.get("success"):
+            return f"{result['temp_c']} derece, {result['desc']}"
+        return None
     except Exception as exc:
         logger.warning("Hava durumu alınamadı: %s", exc)
         return None
