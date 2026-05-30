@@ -265,6 +265,34 @@ class Orchestrator:
         if any(k in text for k in ["keychain", "api key kaydet", "şifre kaydet", "credential"]):
             return {"agent": "chat", "reason": "keychain komutu"}
 
+        # ── Browser automation ────────────────────────────────────────────────
+        if any(k in text for k in ["sayfayı scrape", "web'den çek", "formu doldur", "sayfadan veri çek"]):
+            return {"agent": "chat", "reason": "browser automation"}
+
+        # ── Uptime izleme ─────────────────────────────────────────────────────
+        if any(k in text for k in ["uptime", "sunucu izle", "api izle", "site çalışıyor mu", "server down"]):
+            return {"agent": "chat", "reason": "uptime monitor"}
+
+        # ── Sesli günlük ─────────────────────────────────────────────────────
+        if any(k in text for k in ["sesli not", "günlük kaydet", "journal", "konuşarak not"]):
+            return {"agent": "chat", "reason": "voice journal"}
+
+        # ── Code review ───────────────────────────────────────────────────────
+        if any(k in text for k in ["kodu incele", "code review", "pr incele", "diff incele"]):
+            return {"agent": "chat", "reason": "code review"}
+
+        # ── Smart clipboard ───────────────────────────────────────────────────
+        if any(k in text for k in ["panoya bak", "panode ne var", "kopyaladığımı", "clipboard'u"]):
+            return {"agent": "chat", "reason": "smart clipboard"}
+
+        # ── Plugin ───────────────────────────────────────────────────────────
+        if any(k in text for k in ["plugin", "eklenti", "plugin yükle", "plugin listesi"]):
+            return {"agent": "chat", "reason": "plugin"}
+
+        # ── Webhook ───────────────────────────────────────────────────────────
+        if any(k in text for k in ["webhook", "dışarıdan tetikle", "webhook ekle"]):
+            return {"agent": "chat", "reason": "webhook"}
+
         for agent, keys in keyword_rules:
             if any(k in text for k in keys):
                 return {"agent": agent, "reason": "keyword eşleşmesi"}

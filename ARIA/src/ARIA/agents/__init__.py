@@ -26,6 +26,8 @@ try:
         wake_word, context_awareness, pomodoro, imessage,
         git_intelligence, weekly_report, health,
         voice_mode, meeting_assistant, obsidian, keychain,
+        browser_automation, uptime_monitor, voice_journal,
+        code_review, smart_clipboard, plugin_system, webhook,
     )
 except Exception:
     pass

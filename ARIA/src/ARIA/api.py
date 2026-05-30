@@ -6,7 +6,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile, status as http_status
+from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile, status as http_status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -84,6 +84,21 @@ async def lifespan(_app: FastAPI):
         logger.info("Global hotkey başlatıldı: Cmd+Shift+Space")
     except Exception as exc:
         logger.warning("Global hotkey başlatılamadı: %s", exc)
+
+    # Uptime monitor başlat
+    try:
+        from ARIA.tools.uptime_monitor import start_uptime_monitor
+        start_uptime_monitor()
+        logger.info("Uptime monitor başlatıldı")
+    except Exception as exc:
+        logger.warning("Uptime monitor başlatılamadı: %s", exc)
+
+    # Plugin'leri yükle
+    try:
+        from ARIA.tools.plugin_system import load_all_plugins
+        load_all_plugins()
+    except Exception as exc:
+        logger.warning("Plugin yüklenemedi: %s", exc)
 
     yield
 
@@ -2258,6 +2273,332 @@ async def shortcut_weather(x_api_key: str | None = Header(default=None)):
             text = "Hava durumu alınamadı"
         from fastapi.responses import PlainTextResponse
         return PlainTextResponse(text)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Browser Automation ───────────────────────────────────────────────────────
+
+class BrowserScrapeRequest(BaseModel):
+    url: str
+    selector: str | None = None
+    wait_for: str | None = None
+
+class BrowserFormRequest(BaseModel):
+    url: str
+    fields: dict
+    submit_selector: str | None = None
+
+@app.post("/browser/scrape")
+async def browser_scrape_endpoint(req: BrowserScrapeRequest, x_api_key: str | None = Header(default=None)):
+    """JavaScript gerektiren sayfadan içerik çek."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.browser_automation import browser_scrape
+        return browser_scrape(req.url, req.selector, req.wait_for)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.post("/browser/screenshot")
+async def browser_screenshot_endpoint(url: str, x_api_key: str | None = Header(default=None)):
+    """Sayfa ekran görüntüsü al."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.browser_automation import browser_screenshot
+        return browser_screenshot(url)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.post("/browser/form")
+async def browser_form_endpoint(req: BrowserFormRequest, x_api_key: str | None = Header(default=None)):
+    """Web formu doldur ve gönder."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.browser_automation import browser_fill_form
+        return browser_fill_form(req.url, req.fields, req.submit_selector)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.get("/browser/links")
+async def browser_links_endpoint(url: str, filter_text: str | None = None, x_api_key: str | None = Header(default=None)):
+    """Sayfadaki linkleri çıkar."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.browser_automation import browser_extract_links
+        return browser_extract_links(url, filter_text)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Uptime Monitor ────────────────────────────────────────────────────────────
+
+class UptimeAddRequest(BaseModel):
+    url: str
+    name: str = ""
+    interval_sec: int = 60
+    expected_status: int = 200
+    keyword: str | None = None
+
+@app.post("/uptime")
+async def uptime_add_endpoint(req: UptimeAddRequest, x_api_key: str | None = Header(default=None)):
+    """İzlenecek endpoint ekle."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.uptime_monitor import uptime_add
+        return uptime_add(req.url, req.name, req.interval_sec, req.expected_status, req.keyword)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.get("/uptime")
+async def uptime_status_endpoint(x_api_key: str | None = Header(default=None)):
+    """Tüm monitörlerin durumu."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.uptime_monitor import uptime_status
+        return uptime_status()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.delete("/uptime")
+async def uptime_remove_endpoint(url: str, x_api_key: str | None = Header(default=None)):
+    """İzlemeyi kaldır."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.uptime_monitor import uptime_remove
+        return uptime_remove(url)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.get("/uptime/check")
+async def uptime_check_endpoint(url: str, x_api_key: str | None = Header(default=None)):
+    """Hemen kontrol et."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.uptime_monitor import uptime_check_now
+        return uptime_check_now(url)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Voice Journal ─────────────────────────────────────────────────────────────
+
+class JournalRecordRequest(BaseModel):
+    title: str = ""
+    duration_sec: int = 120
+    save_to_obsidian: bool = True
+
+@app.post("/journal/record")
+async def journal_record_endpoint(req: JournalRecordRequest, x_api_key: str | None = Header(default=None)):
+    """Sesli not al — konuş, transkript et, kaydet."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.voice_journal import journal_record
+        return journal_record(req.title, req.duration_sec, req.save_to_obsidian)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.get("/journal")
+async def journal_list_endpoint(limit: int = 10, x_api_key: str | None = Header(default=None)):
+    """Günlük notları listele."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.voice_journal import journal_list
+        return journal_list(limit)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.get("/journal/read")
+async def journal_read_endpoint(date: str | None = None, x_api_key: str | None = Header(default=None)):
+    """Belirli tarihli notu oku."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.voice_journal import journal_read
+        return journal_read(date)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Code Review ───────────────────────────────────────────────────────────────
+
+class PRReviewRequest(BaseModel):
+    owner: str
+    repo: str
+    pr_number: int
+
+class GitHubTokenRequest(BaseModel):
+    token: str
+
+@app.post("/code-review/diff")
+async def code_review_diff_endpoint(path: str | None = None, base: str = "HEAD", x_api_key: str | None = Header(default=None)):
+    """Git diff'i incele."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.code_review import code_review_diff
+        return code_review_diff(path, base)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.post("/code-review/pr")
+async def code_review_pr_endpoint(req: PRReviewRequest, x_api_key: str | None = Header(default=None)):
+    """GitHub PR'ını incele ve yorum bırak."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.code_review import code_review_pr
+        return code_review_pr(req.owner, req.repo, req.pr_number)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.post("/code-review/setup")
+async def code_review_setup_endpoint(req: GitHubTokenRequest, x_api_key: str | None = Header(default=None)):
+    """GitHub token'ı kaydet."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.code_review import code_review_setup_github
+        return code_review_setup_github(req.token)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Smart Clipboard ───────────────────────────────────────────────────────────
+
+class ClipboardActionRequest(BaseModel):
+    action_id: str
+    extra: str = ""
+
+@app.get("/clipboard/smart")
+async def clipboard_smart_endpoint(x_api_key: str | None = Header(default=None)):
+    """Panodaki içeriği akıllıca analiz et."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.smart_clipboard import clipboard_analyze_smart
+        return clipboard_analyze_smart()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.post("/clipboard/action")
+async def clipboard_action_endpoint(req: ClipboardActionRequest, x_api_key: str | None = Header(default=None)):
+    """Pano içeriği üzerinde aksiyon çalıştır."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.smart_clipboard import clipboard_action
+        return clipboard_action(req.action_id, req.extra)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Plugin Sistemi ────────────────────────────────────────────────────────────
+
+class PluginInstallRequest(BaseModel):
+    yaml_content: str
+
+class PluginRunRequest(BaseModel):
+    plugin_name: str
+    command_name: str
+    user_input: str = ""
+
+@app.get("/plugins")
+async def plugins_list_endpoint(x_api_key: str | None = Header(default=None)):
+    """Plugin'leri listele."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.plugin_system import plugin_list
+        return plugin_list()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.post("/plugins/install")
+async def plugin_install_endpoint(req: PluginInstallRequest, x_api_key: str | None = Header(default=None)):
+    """YAML'dan plugin yükle."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.plugin_system import plugin_install
+        return plugin_install(req.yaml_content)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.post("/plugins/run")
+async def plugin_run_endpoint(req: PluginRunRequest, x_api_key: str | None = Header(default=None)):
+    """Plugin komutu çalıştır."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.plugin_system import plugin_run
+        return plugin_run(req.plugin_name, req.command_name, req.user_input)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.post("/plugins/example")
+async def plugin_example_endpoint(x_api_key: str | None = Header(default=None)):
+    """Örnek plugin oluştur."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.plugin_system import plugin_create_example
+        return plugin_create_example()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.delete("/plugins/{name}")
+async def plugin_delete_endpoint(name: str, x_api_key: str | None = Header(default=None)):
+    """Plugin sil."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.plugin_system import plugin_delete
+        return plugin_delete(name)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Webhook ───────────────────────────────────────────────────────────────────
+
+class WebhookRegisterRequest(BaseModel):
+    webhook_id: str
+    action: str
+    message_template: str = ""
+    secret: str = ""
+    description: str = ""
+
+@app.post("/webhooks/register")
+async def webhook_register_endpoint(req: WebhookRegisterRequest, x_api_key: str | None = Header(default=None)):
+    """Webhook kaydı oluştur."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.webhook import webhook_register
+        return webhook_register(req.webhook_id, req.action, req.message_template, req.secret, req.description)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.get("/webhooks")
+async def webhooks_list_endpoint(x_api_key: str | None = Header(default=None)):
+    """Kayıtlı webhook'ları listele."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.webhook import webhook_list
+        return webhook_list()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.delete("/webhooks/{webhook_id}")
+async def webhook_delete_endpoint(webhook_id: str, x_api_key: str | None = Header(default=None)):
+    """Webhook sil."""
+    _check_auth(x_api_key)
+    try:
+        from ARIA.tools.webhook import webhook_delete
+        return webhook_delete(webhook_id)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.post("/webhook/{webhook_id}")
+async def webhook_trigger_endpoint(webhook_id: str, request: Request):
+    """Dış sistemden ARIA'yı tetikle (auth gerektirmez — secret ile korunur)."""
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+
+    signature = request.headers.get("X-ARIA-Signature", "")
+
+    try:
+        from ARIA.tools.webhook import process_webhook
+        return process_webhook(webhook_id, payload, signature)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
